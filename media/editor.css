@@ -1,0 +1,191 @@
+:root {
+  --bg: var(--vscode-editor-background, #1e1e1e);
+  --fg: var(--vscode-editor-foreground, #d4d4d4);
+  --toolbar-bg: var(--vscode-titleBar-activeBackground, #2d2d30);
+  --toolbar-border: var(--vscode-panel-border, #3c3c3c);
+  --btn-bg: transparent;
+  --btn-hover: var(--vscode-toolbar-hoverBackground, #3c3c3c);
+  --btn-active: var(--vscode-toolbar-activeBackground, #4c4c50);
+  --btn-active-fg: var(--vscode-button-background, #0e639c);
+  --accent: var(--vscode-button-background, #0e639c);
+  --accent-fg: var(--vscode-button-foreground, #ffffff);
+  --danger: #f85149;
+  --canvas-bg: #0a0a0a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--toolbar-border);
+  flex-shrink: 0;
+  z-index: 10;
+  flex-wrap: wrap;
+  box-shadow: var(--shadow);
+}
+
+.tool-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.divider {
+  width: 1px;
+  height: 22px;
+  background: var(--toolbar-border);
+  margin: 0 4px;
+}
+
+.spacer { flex: 1; }
+
+button {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--btn-bg);
+  border: 1px solid transparent;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s ease, border-color 0.1s ease;
+  min-width: 30px;
+  min-height: 30px;
+}
+button:hover { background: var(--btn-hover); }
+button:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+button:disabled,
+button[disabled] {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+button.tool[aria-pressed="true"] {
+  background: var(--btn-active);
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+button.swatch {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--swatch);
+  border: 2px solid transparent;
+}
+button.swatch[aria-pressed="true"] {
+  border-color: var(--fg);
+  box-shadow: 0 0 0 1px var(--bg);
+}
+
+button.width {
+  padding: 6px;
+}
+.width-dot {
+  display: inline-block;
+  background: var(--fg);
+  border-radius: 50%;
+}
+button.width[aria-pressed="true"] {
+  background: var(--btn-active);
+  border-color: var(--accent);
+}
+
+button.action {
+  padding: 6px 12px;
+  font-weight: 500;
+}
+button.action.primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+button.action.primary:hover {
+  background: var(--vscode-button-hoverBackground, #1177bb);
+  border-color: var(--vscode-button-hoverBackground, #1177bb);
+}
+button.action.secondary {
+  background: transparent;
+  border-color: var(--toolbar-border);
+}
+button.action.secondary:hover {
+  background: var(--btn-hover);
+}
+
+#canvas-wrap {
+  flex: 1;
+  overflow: auto;
+  background: var(--canvas-bg);
+  background-image:
+    linear-gradient(45deg, #141414 25%, transparent 25%),
+    linear-gradient(-45deg, #141414 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #141414 75%),
+    linear-gradient(-45deg, transparent 75%, #141414 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  display: flex;
+  align-items: safe center;
+  justify-content: safe center;
+  position: relative;
+  padding: 24px;
+}
+
+canvas {
+  display: block;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  cursor: crosshair;
+}
+
+#crop-actions {
+  position: absolute;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  background: var(--toolbar-bg);
+  border: 1px solid var(--toolbar-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 20;
+  pointer-events: auto;
+}
+#crop-actions[hidden] { display: none; }
+
+#empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--vscode-descriptionForeground, #858585);
+  font-size: 13px;
+  pointer-events: none;
+}
+body.loaded #empty-state { display: none; }

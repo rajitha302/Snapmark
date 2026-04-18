@@ -1,0 +1,9 @@
+.git/**
+.gitignore
+.vscodeignore
+PLAN.md
+CLAUDE.md
+.claude/**
+node_modules/**
+dist/**
+*.vsix

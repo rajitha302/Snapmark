@@ -1,0 +1,72 @@
+{
+  "name": "snapmark",
+  "displayName": "Snapmark",
+  "description": "The screenshot annotator for AI chat — clipboard-in, clipboard-out, with redaction, numbered steps, and auto-compression. Works with Claude Code, Copilot Chat, Cursor, and more.",
+  "version": "1.0.0",
+  "publisher": "rajithad",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "annotate",
+    "screenshot",
+    "clipboard",
+    "ai",
+    "claude",
+    "copilot",
+    "markup",
+    "draw"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "snapmark.annotate",
+        "title": "Snapmark: Annotate Clipboard Image",
+        "category": "Snapmark"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "snapmark.annotate",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a"
+      }
+    ],
+    "configuration": {
+      "title": "Snapmark",
+      "properties": {
+        "snapmark.clipboardDetection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Watch the clipboard while VS Code is focused and highlight the Snapmark status-bar item when a screenshot is detected."
+        },
+        "snapmark.maxDimension": {
+          "type": "number",
+          "default": 1920,
+          "minimum": 0,
+          "description": "Maximum pixel dimension (width or height) when copying to clipboard. Larger screenshots are downscaled proportionally to reduce LLM token cost and upload latency. Set to 0 to disable."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "package": "vsce package -o dist/snapmark-$npm_package_version.vsix",
+    "vendor:fabric": "mkdir -p media && curl -L https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js -o media/fabric.min.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.24.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rajitha302/Snapmark.git"
+  }
+}
