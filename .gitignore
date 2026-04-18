@@ -3,6 +3,4 @@ node_modules/
 .vscode-test/
 .DS_Store
 *.log
-CLAUDE.md
-PLAN.md
 .claude/
