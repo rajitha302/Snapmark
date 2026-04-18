@@ -4,3 +4,5 @@ node_modules/
 .DS_Store
 *.log
 .claude/
+CLAUDE.md
+PLAN.md
