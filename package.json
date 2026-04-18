@@ -1,15 +1,17 @@
 {
   "name": "snapmark",
   "displayName": "Snapmark",
-  "description": "The screenshot annotator for AI chat — clipboard-in, clipboard-out, with redaction, numbered steps, and auto-compression. Works with Claude Code, Copilot Chat, Cursor, and more.",
+  "description": "Annotate screenshots on your clipboard before pasting them into AI chats like Claude, Copilot, and Cursor. Redact sensitive parts, add numbered steps, and resize large images automatically.",
   "version": "1.0.0",
   "publisher": "rajithad",
   "license": "MIT",
+  "icon": "media/Logo.png",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Visualization"
   ],
   "keywords": [
     "annotate",
@@ -18,9 +20,22 @@
     "ai",
     "claude",
     "copilot",
+    "cursor",
     "markup",
-    "draw"
+    "redact",
+    "draw",
+    "paste",
+    "llm"
   ],
+  "galleryBanner": {
+    "color": "#0b4fb3",
+    "theme": "dark"
+  },
+  "qna": "marketplace",
+  "bugs": {
+    "url": "https://github.com/rajitha302/Snapmark/issues"
+  },
+  "homepage": "https://github.com/rajitha302/Snapmark#readme",
   "activationEvents": [
     "onStartupFinished"
   ],

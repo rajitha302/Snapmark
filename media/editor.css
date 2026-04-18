@@ -85,6 +85,17 @@ button[disabled] {
   pointer-events: none;
 }
 
+body.empty #toolbar button {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+body.empty #toolbar #btn-cancel {
+  opacity: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
 button.tool[aria-pressed="true"] {
   background: var(--btn-active);
   border-color: var(--accent);
@@ -180,12 +191,46 @@ canvas {
 
 #empty-state {
   position: absolute;
-  inset: 0;
+  inset: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--vscode-descriptionForeground, #858585);
   font-size: 13px;
   pointer-events: none;
+  border-radius: 10px;
 }
 body.loaded #empty-state { display: none; }
+body.empty #empty-state {
+  border: 2px dashed var(--toolbar-border);
+  background: rgba(20, 20, 20, 0.55);
+}
+body.empty #canvas-wrap.dragging #empty-state {
+  border-color: var(--accent);
+  background: rgba(14, 99, 156, 0.18);
+  color: var(--fg);
+}
+.empty-inner {
+  text-align: center;
+  padding: 24px 32px;
+}
+.empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 6px;
+}
+.empty-sub {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground, #858585);
+  margin-bottom: 16px;
+}
+body.empty #empty-state .empty-inner,
+body.empty #empty-state #empty-pick {
+  pointer-events: auto;
+}
+#empty-pick {
+  min-height: 32px;
+  padding: 6px 16px;
+  font-weight: 500;
+}

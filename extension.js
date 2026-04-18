@@ -20,6 +20,7 @@ let pollTimer = null;
 let clipboardArmed = false;
 let copiedUntil = 0;
 let copiedTimer = null;
+let lastSignature = null;
 
 function log(msg) {
   if (outputChannel) outputChannel.appendLine(`[${new Date().toISOString()}] ${msg}`);
@@ -326,15 +327,22 @@ function stopPolling() {
 
 async function probeOnce() {
   if (!shouldPoll()) { stopPolling(); return; }
-  let hasImage = false;
+  let snap;
   try {
-    hasImage = await probeClipboardImage();
+    snap = await probeClipboardSnapshot();
   } catch (err) {
     log(`probe error: ${err && err.message}`);
-    hasImage = false;
+    snap = { hasImage: false, signature: 'err' };
   }
   if (!shouldPoll()) return;
-  setArmed(hasImage);
+  if (lastSignature === null) {
+    lastSignature = snap.signature;
+    setArmed(false);
+    return;
+  }
+  if (snap.signature === lastSignature) return;
+  lastSignature = snap.signature;
+  setArmed(snap.hasImage);
 }
 
 function setArmed(armed) {
@@ -349,23 +357,33 @@ function renderStatusBar() {
   const shortcut = process.platform === 'darwin' ? '⌘⇧A' : 'Ctrl+Shift+A';
   const pasteKey = process.platform === 'darwin' ? '⌘V' : 'Ctrl+V';
   if (copiedUntil > Date.now()) {
-    statusBarItem.text = `$(check) Copied — ${pasteKey} to paste`;
-    statusBarItem.tooltip = 'Snapmark — Annotated image copied to clipboard';
+    statusBarItem.text = `$(check) Copied. ${pasteKey} to paste`;
+    statusBarItem.tooltip = 'Snapmark: annotated image copied to clipboard';
     statusBarItem.color = new vscode.ThemeColor('debugIcon.startForeground');
     statusBarItem.backgroundColor = undefined;
     return;
   }
   if (clipboardArmed) {
     statusBarItem.text = '$(pencil) Annotate';
-    statusBarItem.tooltip = `Snapmark — Screenshot on clipboard, click to annotate (${shortcut})`;
+    statusBarItem.tooltip = `Snapmark: new image on clipboard. Click to annotate (${shortcut})`;
     statusBarItem.color = new vscode.ThemeColor('notificationsWarningIcon.foreground');
     statusBarItem.backgroundColor = undefined;
   } else {
     statusBarItem.text = '$(pencil)';
-    statusBarItem.tooltip = `Snapmark — Annotate clipboard image (${shortcut})`;
+    statusBarItem.tooltip = `Snapmark: annotate clipboard image (${shortcut})`;
     statusBarItem.color = undefined;
     statusBarItem.backgroundColor = undefined;
   }
+}
+
+function maybeShowIntro(context) {
+  const KEY = 'snapmark.introSeen';
+  if (context.globalState.get(KEY)) return;
+  const shortcut = process.platform === 'darwin' ? '⌘⇧A' : 'Ctrl+Shift+A';
+  const message = `Snapmark is ready. Copy an image, then click the pencil in the status bar (or press ${shortcut}) to annotate before pasting.`;
+  vscode.window
+    .showInformationMessage(message, 'Got it')
+    .then(() => context.globalState.update(KEY, true));
 }
 
 function flashCopied() {
@@ -379,31 +397,63 @@ function flashCopied() {
   }, COPIED_FLASH_MS);
 }
 
-async function probeClipboardImage() {
+async function probeClipboardSnapshot() {
   if (process.platform === 'darwin') {
-    const { stdout } = await execFileP('osascript', ['-e', 'clipboard info']);
-    return /«class (PNGf|TIFF|JPEG|GIFf)»/i.test(stdout || '');
+    try {
+      const { stdout } = await execFileP('osascript', ['-e', 'clipboard info']);
+      const sig = (stdout || '').trim();
+      const hasImage = /«class (PNGf|TIFF|JPEG|GIFf)»/i.test(sig);
+      return { hasImage, signature: hasImage ? sig : 'no-image' };
+    } catch {
+      return { hasImage: false, signature: 'err' };
+    }
   }
   if (process.platform === 'win32') {
-    const script =
-      "Add-Type -AssemblyName System.Windows.Forms; " +
-      "if ([System.Windows.Forms.Clipboard]::ContainsImage()) { Write-Output '1' } else { Write-Output '0' }";
-    const { stdout } = await execFileP('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script,
-    ]);
-    return (stdout || '').trim() === '1';
+    try {
+      const script =
+        "Add-Type -MemberDefinition '[DllImport(\"user32.dll\")] public static extern uint GetClipboardSequenceNumber();' -Name SnapmarkClip -Namespace Win32 -ErrorAction SilentlyContinue; " +
+        "Add-Type -AssemblyName System.Windows.Forms; " +
+        "$seq = [Win32.SnapmarkClip]::GetClipboardSequenceNumber(); " +
+        "$has = [System.Windows.Forms.Clipboard]::ContainsImage(); " +
+        "Write-Output \"$seq|$($has.ToString())\"";
+      const { stdout } = await execFileP('powershell.exe', [
+        '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script,
+      ]);
+      const parts = (stdout || '').trim().split('|');
+      const sig = parts[0] || 'unknown';
+      const hasImage = parts[1] === 'True';
+      return { hasImage, signature: sig };
+    } catch {
+      return { hasImage: false, signature: 'err' };
+    }
   }
   if (process.platform === 'linux') {
     const tool = linuxTool();
-    if (!tool) return false;
-    if (tool === 'xclip') {
-      const { stdout } = await execFileP('xclip', ['-selection', 'clipboard', '-t', 'TARGETS', '-o']);
-      return /image\/png/i.test(stdout || '');
+    if (!tool) return { hasImage: false, signature: 'no-tool' };
+    try {
+      let targets = '';
+      if (tool === 'xclip') {
+        const { stdout } = await execFileP('xclip', ['-selection', 'clipboard', '-t', 'TARGETS', '-o']);
+        targets = stdout || '';
+      } else {
+        const { stdout } = await execFileP('wl-paste', ['--list-types']);
+        targets = stdout || '';
+      }
+      const hasImage = /image\/png/i.test(targets);
+      if (!hasImage) return { hasImage: false, signature: 'no-image' };
+      const buf = await readCmdBuffer(
+        tool === 'xclip' ? 'xclip' : 'wl-paste',
+        tool === 'xclip' ? ['-selection', 'clipboard', '-t', 'image/png', '-o'] : ['--type', 'image/png']
+      );
+      if (!buf) return { hasImage: false, signature: 'no-image' };
+      const sample = buf.slice(0, Math.min(2048, buf.length));
+      const hash = require('crypto').createHash('md5').update(sample).digest('hex');
+      return { hasImage: true, signature: buf.length + ':' + hash };
+    } catch {
+      return { hasImage: false, signature: 'err' };
     }
-    const { stdout } = await execFileP('wl-paste', ['--list-types']);
-    return /image\/png/i.test(stdout || '');
   }
-  return false;
+  return { hasImage: false, signature: 'unsupported' };
 }
 
 // -----------------------------------------------------------------------------
@@ -416,13 +466,22 @@ async function annotateCommand(context) {
     return;
   }
 
-  const pngBuffer = await readClipboardPng();
-  if (!pngBuffer) {
-    vscode.window.setStatusBarMessage('$(warning) Snapmark: No image on clipboard', 2500);
+  if (currentPanel && currentPanel.visible) {
+    currentPanel.dispose();
     return;
   }
 
-  const dataUrl = 'data:image/png;base64,' + pngBuffer.toString('base64');
+  const pngBuffer = await readClipboardPng();
+  const dataUrl = pngBuffer
+    ? 'data:image/png;base64,' + pngBuffer.toString('base64')
+    : null;
+
+  // Mark the current clipboard content as handled so reopening the editor
+  // or closing without Copy doesn't re-arm the same image.
+  try {
+    const snap = await probeClipboardSnapshot();
+    lastSignature = snap.signature;
+  } catch {}
 
   if (currentPanel) {
     currentPanel.reveal(vscode.ViewColumn.Active);
@@ -440,6 +499,7 @@ async function annotateCommand(context) {
       localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')],
     }
   );
+  panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'Logo.png');
   currentPanel = panel;
   stopPolling();
   setArmed(false);
@@ -461,6 +521,10 @@ async function annotateCommand(context) {
         }
         const buf = Buffer.from(base64, 'base64');
         await writeClipboardPng(buf);
+        try {
+          const snap = await probeClipboardSnapshot();
+          lastSignature = snap.signature;
+        } catch {}
         flashCopied();
         panel.dispose();
       } else if (msg.type === 'cancel') {
@@ -493,16 +557,24 @@ function activate(context) {
   );
 
   const cfgDisp = vscode.workspace.onDidChangeConfiguration((e) => {
-    if (!e.affectsConfiguration('snapmark.clipboardDetection')) return;
-    stopPolling();
-    if (!detectionEnabled()) {
-      setArmed(false);
-      return;
+    if (e.affectsConfiguration('snapmark.clipboardDetection')) {
+      stopPolling();
+      if (!detectionEnabled()) {
+        setArmed(false);
+      } else {
+        startPolling();
+      }
     }
-    startPolling();
+    if (e.affectsConfiguration('snapmark.maxDimension') && currentPanel) {
+      const maxDimension = vscode.workspace
+        .getConfiguration('snapmark')
+        .get('maxDimension', 1920);
+      currentPanel.webview.postMessage({ type: 'config', maxDimension });
+    }
   });
 
   startPolling();
+  maybeShowIntro(context);
 
   context.subscriptions.push(
     statusBarItem,

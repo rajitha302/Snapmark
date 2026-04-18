@@ -45,11 +45,15 @@
     window.addEventListener('message', (e) => {
       const msg = e.data;
       if (!msg) return;
-      if (msg.type === 'loadImage') loadImage(msg.dataUrl);
-      else if (msg.type === 'config') {
+      if (msg.type === 'loadImage') {
+        if (msg.dataUrl) loadImage(msg.dataUrl);
+        else showEmptyState();
+      } else if (msg.type === 'config') {
         if (typeof msg.maxDimension === 'number') state.maxDimension = msg.maxDimension;
       }
     });
+
+    attachDropAndPaste();
 
     window.addEventListener('resize', () => {
       if (state.imgW) applyFitScale();
@@ -82,6 +86,70 @@
       state.zoom = 1;
       updateHistoryButtons();
       document.body.classList.add('loaded');
+      document.body.classList.remove('empty');
+    });
+  }
+
+  function showEmptyState() {
+    document.body.classList.add('empty');
+    document.body.classList.remove('loaded');
+    const el = document.getElementById('empty-state');
+    if (el) {
+      const pasteKey = navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? '⌘V' : 'Ctrl+V';
+      el.innerHTML =
+        '<div class="empty-inner">' +
+          '<div class="empty-title">Drop an image here</div>' +
+          '<div class="empty-sub">or paste from clipboard (' + pasteKey + ')</div>' +
+          '<button id="empty-pick" class="action secondary" type="button">Choose file…</button>' +
+          '<input id="empty-file" type="file" accept="image/*" hidden />' +
+        '</div>';
+      const fileInput = document.getElementById('empty-file');
+      const pickBtn = document.getElementById('empty-pick');
+      pickBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file || !file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = () => loadImage(reader.result);
+        reader.readAsDataURL(file);
+      });
+    }
+    updateHistoryButtons();
+  }
+
+  function attachDropAndPaste() {
+    const wrap = document.getElementById('canvas-wrap');
+    const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+    ['dragenter', 'dragover'].forEach((ev) =>
+      wrap.addEventListener(ev, (e) => { stop(e); wrap.classList.add('dragging'); })
+    );
+    ['dragleave', 'dragend'].forEach((ev) =>
+      wrap.addEventListener(ev, (e) => { stop(e); wrap.classList.remove('dragging'); })
+    );
+    wrap.addEventListener('drop', (e) => {
+      stop(e);
+      wrap.classList.remove('dragging');
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!file || !file.type || !file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = () => loadImage(reader.result);
+      reader.readAsDataURL(file);
+    });
+    document.addEventListener('paste', (e) => {
+      const items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (it && it.type && it.type.startsWith('image/')) {
+          const file = it.getAsFile();
+          if (!file) continue;
+          e.preventDefault();
+          const reader = new FileReader();
+          reader.onload = () => loadImage(reader.result);
+          reader.readAsDataURL(file);
+          return;
+        }
+      }
     });
   }
 

@@ -1,16 +1,21 @@
 # Snapmark
 
-**The screenshot annotator for AI chat.** Clipboard in, clipboard out — works with Claude Code, GitHub Copilot Chat, Cursor, Gemini Code Assist, Continue, Cline, and anything else that accepts pasted images. No integration, no configuration, no telemetry.
+Annotate screenshots on your clipboard, then paste them into AI chats like Claude, Copilot, and Cursor. Runs locally.
 
-## Why Snapmark?
+## Use it
 
-Every code-editor image tool solves a different problem than this one. Snapmark is the only one built for the "show a screenshot to an LLM" workflow:
+Copy an image. A pencil lights up in your VS Code status bar. Click it, draw on the screenshot, hit **Copy**. Paste into your chat.
 
-- **Redact before sending.** Drag over an API key, password, or customer name — pixelated in place, right in the image. Privacy-preserving by default, not as an afterthought.
-- **Numbered step markers.** Drop `1`, `2`, `3` circles on a UI flow so the model reads the sequence instead of guessing.
-- **Auto-compression on copy.** Retina 5K screenshots get downscaled to a configurable max dimension before hitting the clipboard, so you don't burn vision-model tokens or upload time on pixels no one needs.
+If there is no image on the clipboard, click the pencil anyway. You can drag an image file in, paste one with `Cmd+V`, or pick a file from your computer.
 
-Other extensions either save to disk (Markdown Paste), render code to images (CodeSnap, Polacode), or give you a full Photoshop-style editor on files (Luna Paint). None of them touch the clipboard → annotate → paste into AI chat loop.
+## Features
+
+- Redact sensitive areas (API keys, names, anything you don't want in the image)
+- Drop numbered step markers onto UI flows
+- Pen, arrow, rectangle, ellipse, text, highlight, crop
+- Zoom with `Cmd/Ctrl` + scroll or a trackpad pinch
+- Resize large screenshots automatically on copy
+- Pencil in the status bar lights up when you copy a new image
 
 ## Install
 
@@ -18,27 +23,16 @@ Other extensions either save to disk (Markdown Paste), render code to images (Co
 code --install-extension snapmark-1.0.0.vsix
 ```
 
-### Prerequisites
+Linux users need `xclip` (X11) or `wl-clipboard` (Wayland). macOS and Windows work as-is.
 
-| OS | Requirement |
-|---|---|
-| **macOS** | None. Uses built-in `osascript`. |
-| **Windows** | None. Uses built-in PowerShell (Windows 7+). |
-| **Linux (X11)** | `sudo apt install xclip` (or `dnf install xclip`). Prompted on first use if missing. |
-| **Linux (Wayland)** | `sudo apt install wl-clipboard` (or `dnf install wl-clipboard`). Prompted on first use if missing. |
+## How to use it
 
-Linux doesn't ship with a universal clipboard-image tool, so this is unavoidable. macOS and Windows users install and go.
+1. Copy an image to your clipboard.
+2. Click the pencil in the status bar, or press `Cmd+Shift+A` on macOS (`Ctrl+Shift+A` on Windows and Linux).
+3. Draw on the image.
+4. Click **Copy**, then paste into your AI chat with `Cmd+V`.
 
-## Use
-
-1. Copy an image to your clipboard (`⌃⇧⌘4` on macOS, `Win+Shift+S` on Windows, or any screenshot tool).
-2. The pencil in the VS Code status bar turns into a warm-yellow "Annotate" label within ~2.5s.
-3. Click it, or hit `⌘⇧A` (macOS) / `Ctrl+Shift+A` (Windows/Linux).
-4. Annotate with: pen, arrow, rectangle, ellipse, text, highlight, crop, **redact**, **numbered steps**. Pick colors and stroke sizes from the toolbar.
-5. Click **Copy** (or `⌘⏎`). The annotated image replaces the clipboard contents, downscaled if it exceeded the max-dimension setting.
-6. `⌘V` into any AI chat.
-
-### Keyboard shortcuts (inside editor)
+### Keyboard shortcuts (inside the editor)
 
 | Key | Action |
 |-----|--------|
@@ -48,38 +42,25 @@ Linux doesn't ship with a universal clipboard-image tool, so this is unavoidable
 | `R` | Rectangle |
 | `T` | Text |
 | `C` | Crop |
-| `B` | Redact (pixelate) |
+| `B` | Redact |
 | `N` | Numbered step |
-| `⌘Z` / `⌘⇧Z` | Undo / Redo |
-| `⌘⏎` | Copy |
+| `Cmd/Ctrl + Z` | Undo |
+| `Cmd/Ctrl + Shift + Z` | Redo |
+| `Cmd/Ctrl + scroll` | Zoom |
+| `Cmd/Ctrl + 0` | Reset zoom |
+| `Cmd/Ctrl + Enter` | Copy |
 | `Esc` | Close |
 
 ## Settings
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `snapmark.clipboardDetection` | `true` | Watch the clipboard and highlight the status-bar item when a screenshot is detected. |
-| `snapmark.maxDimension` | `1920` | Max pixel dimension (width or height) when copying to clipboard. Set to `0` to disable. |
-
-## Platform support
-
-| Platform | Status |
-|----------|--------|
-| macOS | ✅ Zero-dep (`osascript`) |
-| Windows | ✅ Zero-dep (PowerShell) |
-| Linux X11 | ✅ Requires `xclip` |
-| Linux Wayland | ✅ Requires `wl-clipboard` |
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `snapmark.clipboardDetection` | `true` | Highlights the status bar when a new image lands on your clipboard. |
+| `snapmark.maxDimension` | `1920` | Longest edge (in pixels) when copying. Set to `0` to keep the original size. |
 
 ## Privacy
 
-Snapmark is 100% local:
-- No network calls
-- No telemetry
-- No accounts
-- No cloud
-- Nothing leaves your machine — including the detection probe, which only asks the OS "is there an image on the clipboard?" without reading the pixels.
-
-We only read from and write to your system clipboard, via standard OS commands (`osascript` on macOS, PowerShell on Windows, `xclip` / `wl-clipboard` on Linux).
+Snapmark runs entirely on your machine. No network calls, no telemetry, no accounts. It only reads and writes your clipboard.
 
 ## License
 
