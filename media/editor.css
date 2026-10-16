@@ -83,7 +83,7 @@ html, body {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
   pointer-events: none;
 }
@@ -93,6 +93,22 @@ html, body {
   display: flex;
   gap: 6px;
   margin-left: auto;
+}
+
+/* Tools run down the left edge, centred between the top buttons and the
+   bottom bar. Grid (not column-wrap flex, which Chromium sizes wrongly)
+   lets a short panel spill the tools into a second column. */
+#tools {
+  position: fixed;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(auto-fit, 38px);
+  gap: 2px;
+  max-height: calc(100% - 168px);
 }
 
 .bar {
@@ -314,7 +330,7 @@ body.empty #btn-done {
 
 #empty-state {
   position: absolute;
-  inset: 96px 24px 104px;
+  inset: 96px 24px 104px 88px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -360,6 +376,7 @@ body.empty #empty-state .empty-inner { pointer-events: auto; }
    dividers, which would dangle at the end of a wrapped row. */
 @media (max-width: 520px) {
   button.tool, button.width, button.action.icon { width: 34px; height: 34px; }
+  #tools { grid-template-rows: repeat(auto-fit, 34px); }
   button.swatch { width: 26px; height: 26px; }
   .divider { display: none; }
   #stylebar { gap: 4px 10px; }

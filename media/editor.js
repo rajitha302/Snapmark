@@ -149,13 +149,16 @@
 
   function applyFitScale() {
     const wrap = document.getElementById('canvas-wrap');
-    // The bars float over the stage and wrap at narrow widths, so fit the
-    // image into the gap between them.
+    // The bars float over the stage and wrap at narrow/short sizes, so fit
+    // the image into the space they leave: right of the tools, below the top
+    // buttons, above the style bar.
     const top = document.getElementById('topbar').getBoundingClientRect().bottom + 16;
     const bottom = window.innerHeight - document.getElementById('stylebar').getBoundingClientRect().top + 16;
+    const left = document.getElementById('tools').getBoundingClientRect().right + 16;
     wrap.style.paddingTop = top + 'px';
     wrap.style.paddingBottom = bottom + 'px';
-    const maxW = wrap.clientWidth - 48;
+    wrap.style.paddingLeft = left + 'px';
+    const maxW = wrap.clientWidth - left - 24;
     const maxH = wrap.clientHeight - top - bottom;
     const fit = Math.min(1, maxW / state.imgW, maxH / state.imgH);
     state.scale = fit;

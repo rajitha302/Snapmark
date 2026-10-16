@@ -2,7 +2,7 @@
 
 ## 1.0.1 — 2026-10-16
 
-- New look: frosted-glass toolbars float over the screenshot, with tools at the top, Close and Copy at the top right, and colours, widths and undo at the bottom. When transparency is reduced in system settings, the bars are solid. Colours are now Apple's system palette.
+- New look: frosted-glass toolbars float over the screenshot, with tools down the left edge, upload, Copy and Close at the top right, and colours, widths and undo at the bottom. When transparency is reduced in system settings, the bars are solid. Colours are now Apple's system palette.
 - Fixed the screenshot staying invisible after opening (or after zooming or resizing) on Retina/HiDPI screens until you drew something.
 - Redact now covers the area with a solid block. Pixelated text can sometimes be reconstructed, so pixelation was not a safe way to hide secrets.
 - Crop and redact no longer extend past the area you drew when you drag beyond the image edge.
