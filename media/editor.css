@@ -265,6 +265,10 @@ button.action.icon {
   border-radius: 23px;
   font-size: 15px;
 }
+#commit button.action.icon {
+  width: 46px;
+  padding: 0;
+}
 #commit button.action.glass:hover {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.08)),
@@ -360,6 +364,7 @@ body.empty #empty-state .empty-inner { pointer-events: auto; }
   .divider { display: none; }
   #stylebar { gap: 4px 10px; }
   #commit button.action { height: 40px; padding: 0 18px; font-size: 14px; }
+  #commit button.action.icon { width: 40px; padding: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
