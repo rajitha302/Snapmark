@@ -155,6 +155,23 @@ button.grip {
 }
 #tools.dragging button.grip { cursor: grabbing; }
 
+button.tool svg { width: 18px; height: 18px; }
+
+/* A slot holding several tools (arrows, shapes, …): a small corner mark, as
+   in Figma or Photoshop. Clicking the active slot lists them. */
+button.tool[data-group] { position: relative; }
+button.tool[data-group]::after {
+  content: "";
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 5px;
+  height: 5px;
+  background: currentColor;
+  opacity: 0.55;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+
 /* A tool button being dragged to a new place in the pill. */
 button.tool.reordering {
   cursor: grabbing;
@@ -286,6 +303,19 @@ button.width[aria-pressed="true"] {
     0 2px 8px rgba(0, 0, 0, 0.20);
 }
 
+/* Pixel density for Measure labels; only shown while measuring. */
+#btn-scale {
+  height: 28px;
+  padding: 0 9px;
+  margin-right: 4px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, 0.10);
+}
+#btn-scale[hidden] { display: none; }
+
 .width-dot {
   display: inline-block;
   border-radius: 50%;
@@ -340,6 +370,8 @@ button.action.icon {
   padding: 0;
 }
 #commit svg { width: 15px; height: 15px; }
+#commit svg.chev { width: 11px; height: 11px; margin-left: -2px; opacity: 0.7; display: none; }
+body.loaded #commit svg.chev { display: block; }
 #commit button.action.glass:hover {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.08)),
@@ -489,6 +521,10 @@ button.menu-item:focus-visible .menu-hint { color: rgba(255, 255, 255, 0.8); }
 button.menu-item.danger { color: #ff6961; }
 button.menu-item.danger:hover,
 button.menu-item.danger:focus-visible { background: #ff3b30; color: #fff; }
+button.menu-item[aria-checked="true"] { font-weight: 600; }
+button.menu-item[aria-checked="true"] svg { color: var(--focus); opacity: 1; }
+button.menu-item[aria-checked="true"]:hover svg,
+button.menu-item[aria-checked="true"]:focus-visible svg { color: #fff; }
 .menu-sep {
   height: 1px;
   margin: 5px 8px;
@@ -497,6 +533,73 @@ button.menu-item.danger:focus-visible { background: #ff3b30; color: #fff; }
 @media (prefers-reduced-transparency: reduce) {
   #context-menu { background: var(--glass-solid); }
 }
+
+/* ---------------------------------------------------------------------------
+   Loupe (Measure, color picker) and the drop targets for a second image
+   ------------------------------------------------------------------------- */
+
+#loupe {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+#loupe[hidden] { display: none; }
+#loupe canvas {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.45);
+  image-rendering: pixelated;
+}
+.loupe-label {
+  padding: 3px 9px;
+  border-radius: 10px;
+  background: rgba(28, 28, 30, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  font: 600 12px Menlo, Consolas, monospace;
+}
+.loupe-label[hidden] { display: none; }
+
+#drop-zones {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.45);
+}
+#drop-zones[hidden] { display: none; }
+.drop-zone {
+  width: min(240px, 42vw);
+  padding: 28px 16px;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  transition: transform 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+}
+.drop-zone svg { margin-bottom: 6px; opacity: 0.9; }
+.drop-zone > * { pointer-events: none; } /* so dragover's target is the zone */
+.drop-zone.over {
+  transform: scale(1.04);
+  border-color: rgba(10, 132, 255, 0.9);
+  background: rgba(10, 132, 255, 0.28);
+  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.18), 0 0 32px rgba(10, 132, 255, 0.4);
+}
+.drop-title { font-size: 15px; font-weight: 600; }
+.drop-sub { font-size: 12px; color: var(--ink-dim); }
 
 /* Narrow panels: tighter buttons so the tools fit on one row, and no
    dividers, which would dangle at the end of a wrapped row. */
@@ -514,6 +617,8 @@ button.menu-item.danger:focus-visible { background: #ff3b30; color: #fff; }
 @media (prefers-reduced-motion: reduce) {
   #context-menu { animation: none; }
   #dock-hint { transition: none; }
+  .drop-zone { transition: none; }
+  .drop-zone.over { transform: none; }
   button { transition: none; }
   button:active, button.swatch:hover { transform: none; }
 }

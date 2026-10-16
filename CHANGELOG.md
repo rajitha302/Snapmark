@@ -24,6 +24,12 @@
 - New Upload button next to Copy for opening a different image partway through. It replaces the current image and its annotations.
 - New two-way arrow tool (`D`), for showing a relationship or a measurement between two points.
 - New shortcuts: `E` for ellipse, `H` for highlight.
+- New Measure tool (`U`) for UI work: drag between two points to label the distance in pixels. Lines snap to horizontal or vertical (hold Shift to force it), and a magnifier shows the exact pixels under the pointer. On Retina screenshots the label shows CSS pixels: Snapmark reads the density saved in the PNG, and the `2×` button in the bottom bar corrects it when the guess is wrong.
+- New Color picker (`I`): click any pixel to label its hex value (e.g. `#1F6FEB`), with the same magnifier while you aim.
+- New Spotlight (`S`): drag over the part that matters and everything else is dimmed. Annotations stay bright, and several spotlights can overlap.
+- Compare two images: Upload → Compare with another image (or drop a second image onto the "Compare" target) places it beside the current one, labelled "Actual" and "Expected", for "make it look like this" requests. Upload → Replace image works as before.
+- To keep the toolbar compact, related tools share a slot: arrow and two-way arrow, rectangle and ellipse, highlight and spotlight, measure and color picker. The slot shows the last tool used; click it again, or right-click it, to choose another. Shortcuts still select each tool directly.
+- Fixed an error logged when VS Code shut the extension down.
 
 ## 1.0.0 — 2026-04-18
 

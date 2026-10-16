@@ -680,9 +680,10 @@ function activate(context) {
     statusBarItem,
     cmd,
     cfgDisp,
-    outputChannel,
     { dispose: stopPolling },
-    { dispose: () => winProbe && stopWinProbe(winProbe) }
+    { dispose: () => winProbe && stopWinProbe(winProbe) },
+    // Last: subscriptions are disposed in order, and stopPolling logs.
+    outputChannel
   );
 }
 

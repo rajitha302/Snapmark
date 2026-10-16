@@ -23,10 +23,40 @@
     maxDimension: 1920,
     zoom: 1,
     dock: 'left',
+    pxScale: 1, // screenshot pixels per CSS pixel, for Measure labels
+    sampler: null, // { bg, canvas, ctx } holding the background's pixels
   };
 
   const MIN_ZOOM = 0.2;
   const MAX_ZOOM = 8;
+
+  const IS_MAC = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const svg = (body) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + '</svg>';
+
+  // Tools that share a toolbar slot (see data-group in editor.html). The slot
+  // shows the last one used; clicking the active slot opens the others.
+  const TOOL_INFO = {
+    arrow: { label: 'Arrow', key: 'A', icon: svg('<line x1="5" y1="19" x2="19" y2="5"/><polyline points="9 5 19 5 19 15"/>') },
+    arrow2: { label: 'Two-way arrow', key: 'D', icon: svg('<line x1="5" y1="19" x2="19" y2="5"/><polyline points="11 5 19 5 19 13"/><polyline points="5 11 5 19 13 19"/>') },
+    rect: { label: 'Rectangle', key: 'R', icon: svg('<rect x="3" y="5" width="18" height="14" rx="3"/>') },
+    ellipse: { label: 'Ellipse', key: 'E', icon: svg('<ellipse cx="12" cy="12" rx="9" ry="6"/>') },
+    highlight: { label: 'Highlight', key: 'H', icon: svg('<path d="M9 11l-6 6v3h3l6-6"/><path d="M22 12l-4.5 4.5a2.1 2.1 0 0 1-3 0L9 12l6-6 4.5 4.5a2.1 2.1 0 0 1 0 3z"/>') },
+    spotlight: { label: 'Spotlight', key: 'S', icon: svg('<path fill="currentColor" fill-opacity="0.4" stroke="none" fill-rule="evenodd" d="M6 2.5h12A3.5 3.5 0 0 1 21.5 6v12a3.5 3.5 0 0 1-3.5 3.5H6A3.5 3.5 0 0 1 2.5 18V6A3.5 3.5 0 0 1 6 2.5ZM9 7.5A1.5 1.5 0 0 0 7.5 9v6A1.5 1.5 0 0 0 9 16.5h6a1.5 1.5 0 0 0 1.5-1.5V9A1.5 1.5 0 0 0 15 7.5Z"/><rect x="7.5" y="7.5" width="9" height="9" rx="1.5"/>') },
+    measure: { label: 'Measure', key: 'U', icon: svg('<path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/>') },
+    eyedropper: { label: 'Color picker', key: 'I', icon: svg('<path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/>') },
+  };
+
+  const toolSlots = () => Array.from(document.querySelectorAll('#tools button.tool'));
+  const slotId = (btn) => btn.dataset.slot || btn.dataset.tool;
+  const slotFor = (tool) => toolSlots().find((b) => (b.dataset.group || b.dataset.tool).split(' ').includes(tool));
+
+  function renderSlot(btn, tool) {
+    const info = TOOL_INFO[tool];
+    btn.dataset.tool = tool;
+    btn.innerHTML = info.icon;
+    btn.setAttribute('aria-label', info.label);
+    btn.title = info.label + ' (' + info.key + '). Click again for more';
+  }
 
   // Figma-style comment: editable text inside a speech bubble whose sharp
   // corner (`tail`: 'bl' | 'br' | 'tl' | 'tr') sits on the clicked point. The
@@ -97,6 +127,110 @@
     return fabric.Object._fromObject('CommentBubble', Object.assign({}, object, { styles }), callback, 'text');
   };
 
+  // Dimension line: end ticks plus a pill with the length in CSS pixels
+  // (screenshot pixels / state.pxScale), so "16 px" on a Retina screenshot
+  // means 16 CSS px. The label reads state.pxScale at render time, so
+  // changing the scale relabels every measurement.
+  fabric.Measure = fabric.util.createClass(fabric.Line, {
+    type: 'measure',
+    objectCaching: false, // the label is drawn outside the line's bounds
+    hasControls: false,
+
+    initialize: function (points, options) {
+      this.callSuper('initialize', points, options);
+      this.padding = 10; // a horizontal line is only strokeWidth tall to click
+    },
+
+    _render: function (ctx) {
+      const p = this.calcLinePoints();
+      const len = Math.hypot(p.x2 - p.x1, p.y2 - p.y1);
+      if (!len) return;
+      const w = this.strokeWidth;
+      const ux = (p.x2 - p.x1) / len, uy = (p.y2 - p.y1) / len;
+      let nx = -uy, ny = ux;
+      if (ny > 0 || (ny === 0 && nx > 0)) { nx = -nx; ny = -ny; } // point up, or left
+      const tick = 4 + w * 2;
+      ctx.save();
+      ctx.lineCap = 'butt';
+      ctx.lineWidth = w;
+      ctx.strokeStyle = this.stroke;
+      ctx.beginPath();
+      ctx.moveTo(p.x1, p.y1);
+      ctx.lineTo(p.x2, p.y2);
+      [[p.x1, p.y1], [p.x2, p.y2]].forEach(([x, y]) => {
+        ctx.moveTo(x + nx * tick, y + ny * tick);
+        ctx.lineTo(x - nx * tick, y - ny * tick);
+      });
+      ctx.stroke();
+
+      const text = measureLabel(len);
+      const fs = 12 + w * 2;
+      ctx.font = '600 ' + fs + 'px "Helvetica Neue", Helvetica, Arial, sans-serif';
+      const lw = ctx.measureText(text).width + fs;
+      const lh = fs * 1.5;
+      let cx = (p.x1 + p.x2) / 2, cy = (p.y1 + p.y2) / 2;
+      // Too short to hold the label: put it beside the line instead.
+      if (len < Math.abs(ux) * lw + Math.abs(uy) * lh + tick * 2) {
+        const off = (Math.abs(nx) * lw + Math.abs(ny) * lh) / 2 + tick + 4;
+        cx += nx * off;
+        cy += ny * off;
+      }
+      ctx.beginPath();
+      ctx.roundRect(cx - lw / 2, cy - lh / 2, lw, lh, lh / 2);
+      ctx.fillStyle = this.stroke;
+      ctx.fill();
+      ctx.lineWidth = Math.max(1.5, fs * 0.08);
+      ctx.strokeStyle = isLightColor(this.stroke) ? 'rgba(0, 0, 0, 0.18)' : '#ffffff';
+      ctx.stroke();
+      ctx.fillStyle = isLightColor(this.stroke) ? '#1c1c1e' : '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, cx, cy + fs * 0.04);
+      ctx.restore();
+    },
+  });
+
+  fabric.Measure.fromObject = function (object, callback) {
+    const options = Object.assign({}, object, { points: [object.x1, object.y1, object.x2, object.y2] });
+    return fabric.Object._fromObject('Measure', options, (m) => {
+      delete m.points;
+      if (callback) callback(m);
+    }, 'points');
+  };
+
+  function measureLabel(len) {
+    const v = len / state.pxScale;
+    const shown = Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1);
+    return shown + ' px';
+  }
+
+  // The density a PNG was saved at, from its pHYs chunk: macOS writes 144 dpi
+  // for Retina screenshots (72 dpi = 1x); Windows and Linux count from 96.
+  // No pHYs, or not PNG: assume 1x. The scale button corrects a wrong guess.
+  function detectPixelScale(dataUrl) {
+    const head = /^data:image\/png;base64,/.exec(dataUrl);
+    if (!head) return 1;
+    let bytes;
+    try {
+      bytes = atob(dataUrl.slice(head[0].length, head[0].length + 87384)); // ~64KB, past any colour profile
+    } catch {
+      return 1;
+    }
+    const u32 = (k) => ((bytes.charCodeAt(k) << 24) | (bytes.charCodeAt(k + 1) << 16) |
+      (bytes.charCodeAt(k + 2) << 8) | bytes.charCodeAt(k + 3)) >>> 0;
+    for (let i = 8; i + 8 <= bytes.length;) {
+      const type = bytes.slice(i + 4, i + 8);
+      if (type === 'pHYs' && i + 17 <= bytes.length) {
+        if (bytes.charCodeAt(i + 16) !== 1) return 1; // unit isn't metres
+        const dpi = u32(i + 8) * 0.0254;
+        return Math.min(3, Math.max(1, Math.round(dpi / (IS_MAC ? 72 : 96))));
+      }
+      if (type === 'IDAT' || type === 'IEND') break;
+      i += 12 + u32(i);
+    }
+    return 1;
+  }
+
   function init() {
     const el = document.getElementById('canvas');
     state.canvas = new fabric.Canvas(el, {
@@ -104,6 +238,14 @@
       selection: false,
       isDrawingMode: true,
     });
+    // Spotlight dimming sits between the screenshot and the annotations, so
+    // arrows and labels drawn over it stay bright. Exports render it too.
+    const renderBackground = state.canvas._renderBackground;
+    state.canvas._renderBackground = function (ctx) {
+      renderBackground.call(this, ctx);
+      renderSpotlights(ctx, this);
+    };
+    toolSlots().forEach((b) => { if (b.dataset.group) renderSlot(b, b.dataset.tool); });
     configureBrush();
     attachCanvasHandlers();
     attachToolbarHandlers();
@@ -111,6 +253,7 @@
     attachWheelZoom();
     attachToolsDrag();
     attachToolReorder();
+    attachLoupe();
     layoutChrome();
 
     vscode.postMessage({ type: 'ready' });
@@ -175,11 +318,17 @@
   // Saved order from the extension. Tools missing from it (e.g. added in a
   // later version) keep their default position relative to each other, at
   // the end.
+  // Ids are slots; a tool id (saved before tools were grouped) stands for its
+  // slot.
   function applyToolOrder(order) {
     const tools = document.getElementById('tools');
-    const buttons = Array.from(tools.querySelectorAll('button.tool'));
-    const byId = new Map(buttons.map((b) => [b.dataset.tool, b]));
-    const sorted = order.map((id) => byId.get(id)).filter(Boolean);
+    const buttons = toolSlots();
+    const byId = new Map(buttons.map((b) => [slotId(b), b]));
+    const sorted = [];
+    order.forEach((id) => {
+      const b = byId.get(id) || slotFor(id);
+      if (b && !sorted.includes(b)) sorted.push(b);
+    });
     buttons.forEach((b) => { if (!sorted.includes(b)) sorted.push(b); });
     sorted.forEach((b) => tools.appendChild(b));
   }
@@ -189,8 +338,8 @@
   // selects the tool.
   function attachToolReorder() {
     const tools = document.getElementById('tools');
-    const toolButtons = () => Array.from(tools.querySelectorAll('button.tool'));
-    const save = () => vscode.postMessage({ type: 'toolsOrder', order: toolButtons().map((b) => b.dataset.tool) });
+    const toolButtons = toolSlots;
+    const save = () => vscode.postMessage({ type: 'toolsOrder', order: toolButtons().map(slotId) });
     let drag = null;
     let swallowClick = false;
     tools.addEventListener('pointerdown', (e) => {
@@ -344,6 +493,7 @@
 
   function loadImage(dataUrl) {
     cancelCrop();
+    setPxScale(detectPixelScale(dataUrl));
     fabric.Image.fromURL(dataUrl, (img) => {
       state.imgW = img.width;
       state.imgH = img.height;
@@ -365,11 +515,66 @@
     });
   }
 
-  function loadFile(file) {
+  // mode 'compare' places the file next to the current image instead of
+  // replacing it.
+  function loadFile(file, mode) {
     if (!file || !file.type || !file.type.startsWith('image/')) return;
     const reader = new FileReader();
-    reader.onload = () => loadImage(reader.result);
+    reader.onload = () => {
+      if (mode === 'compare' && state.imgW) placeBeside(reader.result);
+      else loadImage(reader.result);
+    };
     reader.readAsDataURL(file);
+  }
+
+  // Expected vs actual: a second image (say, the design) joins the current one
+  // on a wider background, scaled to match its height (or width when they
+  // stack), each with an editable label. Annotations keep their place on the
+  // first image. Like crop, this resets history; the labels are the one step
+  // that can be undone.
+  function placeBeside(dataUrl) {
+    cancelCrop();
+    const c = state.canvas;
+    const bg = c.backgroundImage;
+    fabric.util.loadImage(dataUrl, (img) => {
+      if (!img || !bg) return;
+      const W1 = state.imgW, H1 = state.imgH;
+      const stacked = W1 > H1; // wide screenshots stack, so the result stays near square
+      const s = stacked ? W1 / img.width : H1 / img.height;
+      const w2 = Math.round(img.width * s), h2 = Math.round(img.height * s);
+      const gap = Math.max(16, Math.round(Math.max(W1, H1) * 0.02));
+      const x2 = stacked ? 0 : W1 + gap, y2 = stacked ? H1 + gap : 0;
+      const W = stacked ? W1 : x2 + w2, H = stacked ? y2 + h2 : H1;
+      const tmp = document.createElement('canvas');
+      tmp.width = W;
+      tmp.height = H;
+      const ctx = tmp.getContext('2d');
+      ctx.fillStyle = '#2c2c2e';
+      if (stacked) ctx.fillRect(0, H1, W, gap); else ctx.fillRect(W1, 0, gap, H);
+      ctx.drawImage(bg.getElement(), 0, 0);
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, x2, y2, w2, h2);
+      fabric.Image.fromURL(tmp.toDataURL('image/png'), (newBg) => {
+        state.imgW = W;
+        state.imgH = H;
+        c.setDimensions({ width: W, height: H });
+        c.setBackgroundImage(newBg, () => {
+          state.zoom = 1;
+          applyFitScale();
+          state.history = [serialize()];
+          state.redoStack = [];
+          const m = Math.round(gap * 0.75);
+          // Big enough to read once Copy scales the pair down.
+          const fs = Math.max(commentFontSize(state.width), Math.round(Math.max(W, H) / 60));
+          [makeComment(m, m, 'Actual', 'tl', fs), makeComment(x2 + m, y2 + m, 'Expected', 'tl', fs)].forEach((label) => {
+            label.selectable = label.evented = isInteractive(label);
+            c.add(label);
+          });
+          c.requestRenderAll();
+          snapshot();
+        }, { originX: 'left', originY: 'top' });
+      });
+    });
   }
 
   function showEmptyState() {
@@ -391,19 +596,37 @@
     updateHistoryButtons();
   }
 
+  // Dropping a file with no image open loads it. With one open, two targets
+  // appear: replace it, or place the new one beside it to compare.
   function attachDropAndPaste() {
     const wrap = document.getElementById('canvas-wrap');
-    const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
-    ['dragenter', 'dragover'].forEach((ev) =>
-      wrap.addEventListener(ev, (e) => { stop(e); wrap.classList.add('dragging'); })
-    );
-    ['dragleave', 'dragend'].forEach((ev) =>
-      wrap.addEventListener(ev, (e) => { stop(e); wrap.classList.remove('dragging'); })
-    );
-    wrap.addEventListener('drop', (e) => {
-      stop(e);
+    const zones = document.getElementById('drop-zones');
+    const hasFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+    const zoneAt = (e) => e.target.closest && e.target.closest('.drop-zone');
+    const hide = () => {
       wrap.classList.remove('dragging');
-      loadFile(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]);
+      zones.hidden = true;
+    };
+    document.addEventListener('dragover', (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      if (!state.imgW) { wrap.classList.add('dragging'); return; }
+      zones.hidden = false;
+      const zone = zoneAt(e);
+      zones.querySelectorAll('.drop-zone').forEach((z) => z.classList.toggle('over', z === zone));
+      e.dataTransfer.dropEffect = zone ? 'copy' : 'none';
+    });
+    // relatedTarget is null only when the drag leaves the page.
+    document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) hide(); });
+    document.addEventListener('drop', (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      const zone = zoneAt(e);
+      const loaded = !!state.imgW;
+      hide();
+      if (!loaded) loadFile(file);
+      else if (zone) loadFile(file, zone.dataset.mode);
     });
     document.addEventListener('paste', (e) => {
       const items = e.clipboardData && e.clipboardData.items;
@@ -488,9 +711,35 @@
     });
     c.defaultCursor = tool === 'select' ? 'default' : 'crosshair';
     c.requestRenderAll();
-    document.querySelectorAll('button.tool').forEach((btn) => {
+    const slot = slotFor(tool);
+    if (slot && slot.dataset.group) renderSlot(slot, tool);
+    toolSlots().forEach((btn) => {
       btn.setAttribute('aria-pressed', btn.dataset.tool === tool ? 'true' : 'false');
     });
+    hideLoupe();
+    closeMenu();
+    syncScaleButton();
+  }
+
+  // The scale button is only relevant to measurements, so it shows while
+  // measuring or while any measurement is on the image.
+  function syncScaleButton() {
+    const show = state.tool === 'measure' || state.canvas.getObjects().some((o) => o.type === 'measure');
+    const btn = document.getElementById('btn-scale');
+    if (btn.hidden === !show) return;
+    btn.hidden = !show;
+    layoutChrome();
+  }
+
+  function setPxScale(scale) {
+    state.pxScale = scale;
+    const btn = document.getElementById('btn-scale');
+    btn.textContent = scale + '×';
+    btn.title = scale === 1
+      ? 'Measuring in image pixels. Click if this is a 2× (Retina) screenshot'
+      : 'Screenshot taken at ' + scale + '×: measuring in CSS pixels (image pixels ÷ ' + scale + '). Click to change';
+    btn.setAttribute('aria-label', 'Screenshot scale ' + scale + '×');
+    if (state.canvas) state.canvas.requestRenderAll();
   }
 
   // Picking a colour also recolours whatever is selected.
@@ -515,7 +764,8 @@
   function recolor(o, color) {
     const kind = o.data && o.data.kind;
     const onColor = isLightColor(color) ? '#1c1c1e' : '#ffffff';
-    if (kind === 'redact') return false;
+    // A colour label shows a sampled colour, and spotlights have none.
+    if (kind === 'redact' || kind === 'color' || kind === 'spotlight') return false;
     if (o.type === 'commentBubble') {
       o.set({ backgroundColor: color, fill: onColor });
     } else if (kind === 'step') {
@@ -539,6 +789,7 @@
   const markerRadius = (width) => 14 + width * 2;
   const commentFontSize = (width) => Math.round(20 + width * 2.5);
   const textFontSize = (width) => 16 + width * 3;
+  const chipFontSize = (width) => 14 + width * 2;
 
   // Picking a size also resizes whatever is selected.
   function setWidth(width) {
@@ -564,8 +815,16 @@
 
   function resize(o, width) {
     const kind = o.data && o.data.kind;
-    if (kind === 'redact') return false;
-    if (o.type === 'commentBubble') {
+    if (kind === 'redact' || kind === 'spotlight') return false;
+    if (kind === 'color') {
+      // Scale around the sampled point, so the ring stays on its pixel.
+      const ring = o.getObjects()[o.getObjects().length - 1];
+      const at = () => fabric.util.transformPoint(new fabric.Point(ring.left, ring.top), o.calcTransformMatrix());
+      const before = at();
+      o.scale(chipFontSize(width) / o.data.size);
+      const after = at();
+      o.set({ left: o.left + before.x - after.x, top: o.top + before.y - after.y });
+    } else if (o.type === 'commentBubble') {
       const oldPad = o.padding;
       o.set('fontSize', commentFontSize(width));
       o.padding = Math.round(o.fontSize * 0.6);
@@ -661,6 +920,27 @@
           selectable: false, evented: false,
         });
         c.add(state.currentShape);
+      } else if (state.tool === 'spotlight') {
+        state.currentShape = new fabric.Rect({
+          left: p.x, top: p.y, width: 0, height: 0,
+          fill: 'rgba(0, 0, 0, 0)', stroke: null, strokeWidth: 0,
+          selectable: false, evented: false,
+          data: { kind: 'spotlight' },
+        });
+        c.add(state.currentShape);
+      } else if (state.tool === 'measure') {
+        const x = Math.round(p.x), y = Math.round(p.y);
+        state.startPoint = { x, y };
+        state.currentShape = new fabric.Measure([x, y, x, y], {
+          stroke: state.color, strokeWidth: state.width,
+          selectable: false, evented: false,
+          data: { kind: 'measure' },
+        });
+        c.add(state.currentShape);
+      } else if (state.tool === 'eyedropper') {
+        state.isDrawing = false;
+        placeColorChip(p.x, p.y);
+        return;
       } else if (state.tool === 'arrow' || state.tool === 'arrow2') {
         state.currentShape = new fabric.Line([p.x, p.y, p.x, p.y], {
           stroke: state.color, strokeWidth: state.width,
@@ -721,7 +1001,7 @@
       const s = state.currentShape;
       const sp = state.startPoint;
 
-      if (state.tool === 'rect' || state.tool === 'highlight' || state.tool === 'crop' || state.tool === 'redact') {
+      if (['rect', 'highlight', 'spotlight', 'crop', 'redact'].includes(state.tool)) {
         s.set({
           left: Math.min(sp.x, p.x), top: Math.min(sp.y, p.y),
           width: Math.abs(p.x - sp.x), height: Math.abs(p.y - sp.y),
@@ -733,6 +1013,14 @@
         });
       } else if (state.tool === 'arrow' || state.tool === 'arrow2') {
         s.set({ x2: p.x, y2: p.y });
+      } else if (state.tool === 'measure') {
+        // Whole pixels; snap to horizontal/vertical within a few degrees, or
+        // always with Shift.
+        let x = Math.round(p.x), y = Math.round(p.y);
+        const dx = Math.abs(x - sp.x), dy = Math.abs(y - sp.y);
+        if (opt.e.shiftKey || dy < dx * 0.07) { if (dx >= dy) y = sp.y; }
+        if (opt.e.shiftKey || dx < dy * 0.07) { if (dy > dx) x = sp.x; }
+        s.set({ x2: x, y2: y });
       }
       c.requestRenderAll();
     });
@@ -745,6 +1033,18 @@
 
       if (state.tool === 'rect' || state.tool === 'highlight') {
         if (s.width < 3 || s.height < 3) {
+          c.remove(s); state.currentShape = null; return;
+        }
+      } else if (state.tool === 'spotlight') {
+        if (s.width < 6 || s.height < 6) {
+          c.remove(s); state.currentShape = null; return;
+        }
+        const r = Math.min(12, s.width / 4, s.height / 4);
+        s.set({ rx: r, ry: r });
+        // Behind everything, so annotations over it stay clickable.
+        c.sendToBack(s);
+      } else if (state.tool === 'measure') {
+        if (Math.hypot(s.x2 - s.x1, s.y2 - s.y1) < 4) {
           c.remove(s); state.currentShape = null; return;
         }
       } else if (state.tool === 'crop') {
@@ -794,6 +1094,8 @@
     });
 
     c.on('object:modified', () => snapshot());
+    c.on('object:added', syncScaleButton);
+    c.on('object:removed', syncScaleButton);
 
     // A comment that ends editing with no text is dismissed. Deferred because
     // fabric still uses obj.canvas after firing this event. A new comment is
@@ -1044,18 +1346,27 @@
 
   function placeComment(x, y) {
     const c = state.canvas;
-    const fontSize = commentFontSize(state.width);
-    const pad = Math.round(fontSize * 0.6);
     // Point from the bottom-left like Figma, but flip near the right/top edges
     // so the bubble grows into the image instead of off it.
     const vertical = y < state.imgH * 0.25 ? 't' : 'b';
     const horizontal = x > state.imgW * 0.6 ? 'r' : 'l';
-    const bubble = new fabric.CommentBubble('', {
-      tail: vertical + horizontal,
-      originX: horizontal === 'l' ? 'left' : 'right',
-      originY: vertical === 'b' ? 'bottom' : 'top',
-      left: x + (horizontal === 'l' ? pad : -pad),
-      top: y + (vertical === 'b' ? -pad : pad),
+    const bubble = makeComment(x, y, '', vertical + horizontal);
+    c.add(bubble);
+    c.setActiveObject(bubble);
+    bubble.enterEditing();
+    // No snapshot yet: it is recorded once it has text (object:modified on
+    // exit), and dismissed if it never gets any.
+  }
+
+  // A comment bubble whose `tail` corner sits on (x, y).
+  function makeComment(x, y, text, tail, fontSize = commentFontSize(state.width)) {
+    const pad = Math.round(fontSize * 0.6);
+    return new fabric.CommentBubble(text, {
+      tail,
+      originX: tail[1] === 'l' ? 'left' : 'right',
+      originY: tail[0] === 'b' ? 'bottom' : 'top',
+      left: x + (tail[1] === 'l' ? pad : -pad),
+      top: y + (tail[0] === 'b' ? -pad : pad),
       fontSize,
       // Not the system font: fabric measures glyphs at 400px, where SF's
       // optical sizing is narrower than the rendered size, so the bubble
@@ -1066,11 +1377,147 @@
       backgroundColor: state.color,
       data: { kind: 'comment' },
     });
-    c.add(bubble);
-    c.setActiveObject(bubble);
-    bubble.enterEditing();
-    // No snapshot yet: it is recorded once it has text (object:modified on
-    // exit), and dismissed if it never gets any.
+  }
+
+  // Colour picker: a label with the hex of the screenshot pixel under (x, y),
+  // a ring on that pixel and a pill beside it (flipped near the right edge).
+  function placeColorChip(x, y) {
+    const hex = sampleAt(x, y);
+    if (!hex) return;
+    const c = state.canvas;
+    const fs = chipFontSize(state.width);
+    const r = Math.round(fs * 0.45);
+    const shadow = { color: 'rgba(0, 0, 0, 0.45)', blur: fs * 0.5, offsetY: fs * 0.1 };
+    const ring = new fabric.Circle({
+      radius: r, fill: hex, stroke: '#ffffff', strokeWidth: Math.max(2, fs * 0.14),
+      originX: 'center', originY: 'center', left: 0, top: 0, shadow,
+    });
+    const text = new fabric.Text(hex, {
+      fontSize: fs, fontWeight: '600', fill: '#ffffff', originY: 'center', top: 0,
+      fontFamily: 'Menlo, Consolas, "DejaVu Sans Mono", monospace',
+    });
+    const padX = fs * 0.55, sw = fs * 0.85, gapIn = fs * 0.4, gapOut = r + fs * 0.4;
+    const pillW = padX + sw + gapIn + text.width + padX, pillH = fs * 1.7;
+    const pillLeft = x + gapOut + pillW > state.imgW ? -(gapOut + pillW) : gapOut;
+    const pill = new fabric.Rect({
+      left: pillLeft, top: -pillH / 2, width: pillW, height: pillH, rx: pillH / 2, ry: pillH / 2,
+      fill: 'rgba(28, 28, 30, 0.92)', stroke: 'rgba(255, 255, 255, 0.3)', strokeWidth: 1, shadow,
+    });
+    const swatch = new fabric.Rect({
+      left: pillLeft + padX, top: -sw / 2, width: sw, height: sw, rx: sw * 0.25, ry: sw * 0.25,
+      fill: hex, stroke: 'rgba(255, 255, 255, 0.6)', strokeWidth: 1,
+    });
+    text.set('left', pillLeft + padX + sw + gapIn);
+    // The ring is last: resize() finds it there.
+    const chip = new fabric.Group([pill, swatch, text, ring], {
+      objectCaching: false, // a cached group would clip its parts' shadows
+      selectable: state.tool === 'select', evented: state.tool === 'select',
+      data: { kind: 'color', hex, size: fs },
+    });
+    // Built around (0, 0) = the ring's centre; move that onto the pixel.
+    chip.set({ left: chip.left + x, top: chip.top + y });
+    chip.setCoords();
+    c.add(chip);
+    c.requestRenderAll();
+    snapshot();
+  }
+
+  // Hex of the screenshot pixel at canvas (x, y), ignoring annotations. The
+  // pixels are copied once per background (load, crop and compare replace it).
+  function sampler() {
+    const bg = state.canvas.backgroundImage;
+    if (!bg) return null;
+    if (!state.sampler || state.sampler.bg !== bg) {
+      const cv = document.createElement('canvas');
+      cv.width = state.imgW;
+      cv.height = state.imgH;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(bg.getElement(), 0, 0);
+      state.sampler = { bg, canvas: cv, ctx };
+    }
+    return state.sampler;
+  }
+
+  function sampleAt(x, y) {
+    const px = Math.floor(x), py = Math.floor(y);
+    const sm = sampler();
+    if (!sm || px < 0 || py < 0 || px >= state.imgW || py >= state.imgH) return null;
+    const d = sm.ctx.getImageData(px, py, 1, 1).data;
+    return '#' + [d[0], d[1], d[2]].map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+  }
+
+  // Dim the screenshot outside every spotlight. Clipping to the outside of
+  // each hole in turn intersects the clips, which leaves the outside of their
+  // union, so overlapping spotlights don't re-dim each other.
+  function renderSpotlights(ctx, canvas) {
+    const spots = canvas.getObjects().filter((o) => o.data && o.data.kind === 'spotlight' && o.visible);
+    if (!spots.length) return;
+    const W = state.imgW, H = state.imgH;
+    const v = canvas.viewportTransform;
+    ctx.save();
+    ctx.transform(v[0], v[1], v[2], v[3], v[4], v[5]);
+    spots.forEach((o) => {
+      ctx.beginPath();
+      ctx.rect(0, 0, W, H);
+      ctx.save();
+      const m = o.calcTransformMatrix();
+      ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+      ctx.roundRect(-o.width / 2, -o.height / 2, o.width, o.height, o.rx || 0);
+      ctx.restore(); // the path survives restore; the transform doesn't
+      ctx.clip('evenodd');
+    });
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  // Magnifier for Measure and the colour picker: 15×15 screenshot pixels
+  // around the pointer, the centre one outlined, with its hex when picking.
+  const LOUPE_PX = 15;
+  const LOUPE_SIZE = 120;
+
+  function attachLoupe() {
+    const loupe = document.getElementById('loupe');
+    const cv = loupe.querySelector('canvas');
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = cv.height = LOUPE_SIZE * dpr;
+    const ctx = cv.getContext('2d');
+    const label = loupe.querySelector('.loupe-label');
+    const el = state.canvas.upperCanvasEl;
+    el.addEventListener('pointermove', (e) => {
+      if (state.tool !== 'measure' && state.tool !== 'eyedropper') return;
+      const sm = sampler();
+      if (!sm) return;
+      const p = state.canvas.getPointer(e);
+      const px = Math.floor(p.x), py = Math.floor(p.y);
+      const cell = cv.width / LOUPE_PX;
+      const half = (LOUPE_PX - 1) / 2;
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(sm.canvas, px - half, py - half, LOUPE_PX, LOUPE_PX, 0, 0, cv.width, cv.height);
+      ctx.lineWidth = 2 * dpr;
+      ctx.strokeStyle = '#000000';
+      ctx.strokeRect(half * cell, half * cell, cell, cell);
+      ctx.lineWidth = 1 * dpr;
+      ctx.strokeStyle = '#ffffff';
+      ctx.strokeRect(half * cell + dpr, half * cell + dpr, cell - 2 * dpr, cell - 2 * dpr);
+      const hex = state.tool === 'eyedropper' ? sampleAt(px, py) : null;
+      label.textContent = hex || '';
+      label.hidden = !hex;
+      loupe.hidden = false;
+      // Down-right of the pointer, flipped near the window edges.
+      const w = loupe.offsetWidth, h = loupe.offsetHeight;
+      let x = e.clientX + 24, y = e.clientY + 24;
+      if (x + w > window.innerWidth - 8) x = e.clientX - 24 - w;
+      if (y + h > window.innerHeight - 8) y = e.clientY - 24 - h;
+      loupe.style.transform = 'translate(' + x + 'px, ' + y + 'px)';
+    });
+    el.addEventListener('pointerleave', hideLoupe);
+  }
+
+  function hideLoupe() {
+    document.getElementById('loupe').hidden = true;
   }
 
   function reseedNumberCounter() {
@@ -1116,9 +1563,24 @@
   }
 
   function attachToolbarHandlers() {
-    document.querySelectorAll('button.tool').forEach((btn) => {
-      btn.addEventListener('click', () => setTool(btn.dataset.tool));
+    // A grouped slot picks its current tool; clicked again (or right-clicked)
+    // it lists the tools it holds.
+    toolSlots().forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (menuOwnerJustClosed(btn)) return;
+        if (btn.dataset.group && state.tool === btn.dataset.tool) openToolFlyout(btn);
+        else setTool(btn.dataset.tool);
+      });
+      if (btn.dataset.group) {
+        btn.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openToolFlyout(btn);
+        });
+      }
     });
+    document.getElementById('btn-scale').addEventListener('click', () => setPxScale(state.pxScale % 3 + 1));
+    setPxScale(1);
     document.querySelectorAll('button.swatch').forEach((btn) => {
       btn.addEventListener('click', () => setColor(btn.dataset.color));
     });
@@ -1142,9 +1604,21 @@
     document.getElementById('btn-done').addEventListener('click', done);
     document.getElementById('btn-cancel').addEventListener('click', cancel);
     const fileInput = document.getElementById('file-input');
-    document.getElementById('btn-upload').addEventListener('click', () => fileInput.click());
+    const upload = document.getElementById('btn-upload');
+    const pick = (mode) => {
+      fileInput.dataset.mode = mode;
+      fileInput.click();
+    };
+    upload.addEventListener('click', () => {
+      if (menuOwnerJustClosed(upload)) return;
+      if (!state.imgW) { pick('replace'); return; }
+      openMenu([
+        { label: 'Replace image…', icon: 'replace', run: () => pick('replace') },
+        { label: 'Compare with another image…', icon: 'compare', run: () => pick('compare') },
+      ], { anchor: upload, side: 'below', align: 'end' });
+    });
     fileInput.addEventListener('change', () => {
-      loadFile(fileInput.files[0]);
+      loadFile(fileInput.files[0], fileInput.dataset.mode);
       fileInput.value = ''; // so picking the same file again still fires change
     });
     document.getElementById('crop-apply').addEventListener('click', applyCrop);
@@ -1196,6 +1670,9 @@
       else if (k === 'b' || k === 'B') setTool('redact');
       else if (k === 'n' || k === 'N') setTool('number');
       else if (k === 'm' || k === 'M') setTool('comment');
+      else if (k === 's' || k === 'S') setTool('spotlight');
+      else if (k === 'u' || k === 'U') setTool('measure');
+      else if (k === 'i' || k === 'I') setTool('eyedropper');
       else if (k === 'Delete' || k === 'Backspace') {
         const obj = state.canvas.getActiveObject();
         if (!obj) return;
@@ -1209,9 +1686,7 @@
   // while typing in a text or comment, where the native text menu is kept.
   // ---------------------------------------------------------------------------
 
-  const IS_MAC = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   const keyHint = (mac, other) => (IS_MAC ? mac : other);
-  const svg = (body) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + '</svg>';
   const MENU_ICONS = {
     edit: svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>'),
     duplicate: svg('<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/>'),
@@ -1224,6 +1699,8 @@
     download: svg('<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>'),
     fit: svg('<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>'),
     clear: svg('<path d="m7 21-4-4L14 6l4 4L7 21Z"/><path d="M11 21h10"/>'),
+    replace: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>'),
+    compare: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>'),
   };
 
   function removeObjects(objs) {
@@ -1317,66 +1794,117 @@
     return items;
   }
 
+  // One glass menu serves the right-click menu, the tool-slot flyouts and the
+  // Upload menu. `place` is a point { x, y } or { anchor, side, align }: next
+  // to an element on side 'right' | 'left' | 'below' | 'above', aligned to its
+  // 'start' (default) or 'end'. An anchor element is the menu's owner, so
+  // clicking it while the menu is open closes the menu instead of reopening.
+  const menuState = { owner: null, justClosed: null };
+
+  function closeMenu() {
+    document.getElementById('context-menu').hidden = true;
+    menuState.owner = null;
+  }
+
+  function menuOwnerJustClosed(el) {
+    if (menuState.justClosed !== el) return false;
+    menuState.justClosed = null;
+    return true;
+  }
+
+  function openMenu(items, place) {
+    const menu = document.getElementById('context-menu');
+    hideLoupe();
+    menu.innerHTML = '';
+    items.forEach((it) => {
+      if (it === 'sep') {
+        const sep = document.createElement('div');
+        sep.className = 'menu-sep';
+        sep.setAttribute('role', 'separator');
+        menu.appendChild(sep);
+        return;
+      }
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'menu-item' + (it.danger ? ' danger' : '');
+      b.setAttribute('role', it.checked === undefined ? 'menuitem' : 'menuitemradio');
+      if (it.checked !== undefined) b.setAttribute('aria-checked', String(it.checked));
+      b.disabled = !!it.disabled;
+      b.innerHTML = MENU_ICONS[it.icon] + '<span class="menu-label"></span><span class="menu-hint"></span>';
+      b.querySelector('.menu-label').textContent = it.label;
+      b.querySelector('.menu-hint').textContent = it.hint || '';
+      b.addEventListener('click', () => { closeMenu(); it.run(); });
+      menu.appendChild(b);
+    });
+    menu.hidden = false;
+    const r = menu.getBoundingClientRect();
+    let x = place.x, y = place.y;
+    if (place.anchor) {
+      const a = place.anchor.getBoundingClientRect();
+      const end = place.align === 'end';
+      if (place.side === 'right' || place.side === 'left') {
+        x = place.side === 'right' ? a.right + 8 : a.left - 8 - r.width;
+        y = end ? a.bottom - r.height : a.top;
+      } else {
+        x = end ? a.right - r.width : a.left;
+        y = place.side === 'below' ? a.bottom + 8 : a.top - 8 - r.height;
+      }
+    }
+    menuState.owner = place.anchor || null;
+    menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + 'px';
+    menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + 'px';
+    // Focus the menu, not its first item: a focused item draws as
+    // highlighted, which looks like a hover on a mouse-opened menu. Arrow
+    // keys move onto the items from here.
+    menu.focus({ preventScroll: true });
+  }
+
+  // The tools sharing a slot, opened beside the pill on the side facing the
+  // canvas.
+  function openToolFlyout(btn) {
+    const side = { left: 'right', right: 'left', top: 'below', bottom: 'above' }[state.dock];
+    openMenu(btn.dataset.group.split(' ').map((tool) => {
+      const info = TOOL_INFO[tool];
+      return { label: info.label, icon: tool, hint: info.key, checked: state.tool === tool, run: () => setTool(tool) };
+    }), { anchor: btn, side });
+  }
+
   function attachContextMenu() {
     const menu = document.getElementById('context-menu');
     const wrap = document.getElementById('canvas-wrap');
     const enabledItems = () => Array.from(menu.querySelectorAll('.menu-item:not(:disabled)'));
-    const close = () => { menu.hidden = true; };
-
-    const open = (items, x, y) => {
-      menu.innerHTML = '';
-      items.forEach((it) => {
-        if (it === 'sep') {
-          const sep = document.createElement('div');
-          sep.className = 'menu-sep';
-          sep.setAttribute('role', 'separator');
-          menu.appendChild(sep);
-          return;
-        }
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'menu-item' + (it.danger ? ' danger' : '');
-        b.setAttribute('role', 'menuitem');
-        b.disabled = !!it.disabled;
-        b.innerHTML = MENU_ICONS[it.icon] + '<span class="menu-label"></span><span class="menu-hint"></span>';
-        b.querySelector('.menu-label').textContent = it.label;
-        b.querySelector('.menu-hint').textContent = it.hint || '';
-        b.addEventListener('click', () => { close(); it.run(); });
-        menu.appendChild(b);
-      });
-      menu.hidden = false;
-      const r = menu.getBoundingClientRect();
-      menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + 'px';
-      menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + 'px';
-      // Focus the menu, not its first item: a focused item draws as
-      // highlighted, which looks like a hover on a mouse-opened menu. Arrow
-      // keys move onto the items from here.
-      menu.focus({ preventScroll: true });
-    };
+    Object.keys(TOOL_INFO).forEach((tool) => { MENU_ICONS[tool] = TOOL_INFO[tool].icon; });
 
     document.addEventListener('contextmenu', (e) => {
       const active = state.canvas.getActiveObject();
       if (active && active.isEditing) return; // keep the native text menu
       e.preventDefault();
-      if (!state.imgW || !wrap.contains(e.target)) { close(); return; }
+      if (!state.imgW || !wrap.contains(e.target)) { closeMenu(); return; }
       const target = objectAt(e);
       // Select what was right-clicked, so it's clear what the menu acts on.
       if (target && target !== active && state.tool === 'select') {
         state.canvas.setActiveObject(target);
         state.canvas.requestRenderAll();
       }
-      open(menuItemsFor(target), e.clientX, e.clientY);
+      openMenu(menuItemsFor(target), { x: e.clientX, y: e.clientY });
     });
 
     document.addEventListener('pointerdown', (e) => {
-      if (!menu.hidden && !menu.contains(e.target)) close();
+      menuState.justClosed = null;
+      if (menu.hidden || menu.contains(e.target)) return;
+      if (menuState.owner && menuState.owner.contains(e.target)) menuState.justClosed = menuState.owner;
+      closeMenu();
     }, true);
     // Capture phase, so Escape closes the menu instead of the editor.
     document.addEventListener('keydown', (e) => {
       if (menu.hidden) return;
       const list = enabledItems();
       const i = list.indexOf(document.activeElement);
-      if (e.key === 'Escape') close();
+      if (e.key === 'Escape') {
+        const owner = menuState.owner;
+        closeMenu();
+        if (owner) owner.focus();
+      }
       else if (e.key === 'ArrowDown') list[(i + 1) % list.length].focus();
       else if (e.key === 'ArrowUp') list[i < 0 ? list.length - 1 : (i - 1 + list.length) % list.length].focus();
       else if (e.key === 'Enter' || e.key === ' ') { if (i >= 0) list[i].click(); }
@@ -1384,9 +1912,9 @@
       e.preventDefault();
       e.stopPropagation();
     }, true);
-    window.addEventListener('blur', close);
-    window.addEventListener('resize', close);
-    wrap.addEventListener('scroll', close);
+    window.addEventListener('blur', closeMenu);
+    window.addEventListener('resize', closeMenu);
+    wrap.addEventListener('scroll', closeMenu);
   }
 
   if (document.readyState === 'loading') {
