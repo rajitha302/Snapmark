@@ -12,10 +12,11 @@
 - Windows: clipboard detection uses one background PowerShell process instead of starting a new one every 2.5 seconds.
 - Linux: clipboard tool detection no longer runs on every poll.
 - New comment tool (`M`): click a spot to drop a Figma-style speech bubble that points at it, then type. "Comment" shows as a placeholder until you type, and a comment you leave empty is dismissed. It uses the current colour, the width setting controls the text size, you can double-click to edit it again, and it flips direction near the right and top edges.
+- Tools can be reordered: drag a tool along the toolbar, or focus it and press Alt+Arrow. The order is saved and survives restarts.
 - The toolbar can be moved: drag its grip (or focus it and use the arrow keys) to dock it on the left, right, top or bottom edge. The position is remembered.
 - The tool you pick stays selected until you close the editor. Text and Comment no longer switch back to Select after each use. With those tools, clicking away finishes what you're typing, clicking an existing text or comment edits or moves it, and Delete removes the selected one.
 - Blue is now the default colour.
-- New upload button next to Copy for opening a different image partway through. It replaces the current image and its annotations.
+- New Upload button next to Copy for opening a different image partway through. It replaces the current image and its annotations.
 - New two-way arrow tool (`D`), for showing a relationship or a measurement between two points.
 - New shortcuts: `E` for ellipse, `H` for highlight.
 

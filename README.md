@@ -15,7 +15,7 @@ If there is no image on the clipboard, click the pencil anyway. You can drag an 
 - Leave Figma-style comment bubbles that point at a spot on the screenshot
 - Pen, arrow, two-way arrow, rectangle, ellipse, text, highlight, crop
 - Zoom with `Cmd/Ctrl` + scroll or a trackpad pinch
-- Move the toolbar to any edge by dragging its grip. Snapmark remembers where you put it
+- Move the toolbar to any edge by dragging its grip, and drag tools to reorder them. Snapmark remembers both, even after a restart
 - Resize large screenshots automatically on copy
 - Pencil in the status bar lights up when you copy a new image
 

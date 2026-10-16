@@ -110,6 +110,7 @@
     attachKeyboardHandlers();
     attachWheelZoom();
     attachToolsDrag();
+    attachToolReorder();
     layoutChrome();
 
     vscode.postMessage({ type: 'ready' });
@@ -122,6 +123,7 @@
         else showEmptyState();
       } else if (msg.type === 'config') {
         if (typeof msg.maxDimension === 'number') state.maxDimension = msg.maxDimension;
+        if (Array.isArray(msg.toolsOrder)) applyToolOrder(msg.toolsOrder);
         if (typeof msg.toolsDock === 'string') setDock(msg.toolsDock);
       }
     });
@@ -169,6 +171,82 @@
 
   // Drag the grip to move the tool pill; it snaps to the nearest edge on
   // release. Arrow keys on the focused grip do the same without a mouse.
+  // Saved order from the extension. Tools missing from it (e.g. added in a
+  // later version) keep their default position relative to each other, at
+  // the end.
+  function applyToolOrder(order) {
+    const tools = document.getElementById('tools');
+    const buttons = Array.from(tools.querySelectorAll('button.tool'));
+    const byId = new Map(buttons.map((b) => [b.dataset.tool, b]));
+    const sorted = order.map((id) => byId.get(id)).filter(Boolean);
+    buttons.forEach((b) => { if (!sorted.includes(b)) sorted.push(b); });
+    sorted.forEach((b) => tools.appendChild(b));
+  }
+
+  // Drag a tool button along the pill to reorder (the others shuffle as you
+  // go); Alt+Arrow on a focused tool moves it one place. A plain click still
+  // selects the tool.
+  function attachToolReorder() {
+    const tools = document.getElementById('tools');
+    const toolButtons = () => Array.from(tools.querySelectorAll('button.tool'));
+    const save = () => vscode.postMessage({ type: 'toolsOrder', order: toolButtons().map((b) => b.dataset.tool) });
+    let drag = null;
+    let swallowClick = false;
+    tools.addEventListener('pointerdown', (e) => {
+      const btn = e.target.closest('button.tool');
+      if (!btn || e.button !== 0) return;
+      drag = { btn, id: e.pointerId, x0: e.clientX, y0: e.clientY, active: false };
+    });
+    tools.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      if (!drag.active) {
+        if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 5) return;
+        drag.active = true;
+        drag.btn.setPointerCapture(e.pointerId);
+        drag.btn.classList.add('reordering');
+      }
+      const over = document.elementFromPoint(e.clientX, e.clientY);
+      const target = over && over.closest('#tools button.tool');
+      if (!target || target === drag.btn) return;
+      const list = toolButtons();
+      if (list.indexOf(drag.btn) < list.indexOf(target)) target.after(drag.btn);
+      else target.before(drag.btn);
+    });
+    const end = (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const moved = drag.active;
+      drag.btn.classList.remove('reordering');
+      drag = null;
+      if (!moved) return;
+      save();
+      // The release fires a click on the dragged button; don't let it count
+      // as choosing that tool.
+      swallowClick = true;
+      setTimeout(() => { swallowClick = false; }, 0);
+    };
+    tools.addEventListener('pointerup', end);
+    tools.addEventListener('pointercancel', end);
+    tools.addEventListener('click', (e) => {
+      if (!swallowClick) return;
+      e.stopPropagation();
+      e.preventDefault();
+    }, true);
+    tools.addEventListener('keydown', (e) => {
+      const btn = e.target.closest('button.tool');
+      if (!btn || !e.altKey) return;
+      const step = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }[e.key];
+      if (!step) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const list = toolButtons();
+      const neighbour = list[list.indexOf(btn) + step];
+      if (!neighbour) return;
+      if (step < 0) neighbour.before(btn); else neighbour.after(btn);
+      btn.focus();
+      save();
+    });
+  }
+
   function attachToolsDrag() {
     const tools = document.getElementById('tools');
     const grip = document.getElementById('tools-grip');

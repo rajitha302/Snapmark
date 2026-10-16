@@ -122,7 +122,7 @@ body[data-dock="bottom"] #tools {
   grid-template-columns: repeat(auto-fit, var(--tool));
 }
 /* Leaves room for upload / Copy / Close at the top right. */
-body[data-dock="top"] #tools { top: 12px; left: 12px; max-width: calc(100% - 244px); }
+body[data-dock="top"] #tools { top: 12px; left: 12px; max-width: calc(100% - 276px); }
 /* `bottom` is set in layoutChrome() to sit just above the style bar. */
 body[data-dock="bottom"] #tools { left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); }
 
@@ -139,6 +139,15 @@ button.grip {
   touch-action: none;
 }
 #tools.dragging button.grip { cursor: grabbing; }
+
+/* A tool button being dragged to a new place in the pill. */
+button.tool.reordering {
+  cursor: grabbing;
+  transform: scale(1.1);
+  background: linear-gradient(180deg, var(--lens-top), var(--lens-bottom));
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  z-index: 1;
+}
 
 .bar {
   display: flex;
@@ -305,15 +314,17 @@ button.action.icon {
 }
 
 #commit button.action {
-  height: 44px;
-  padding: 0 18px;
-  border-radius: 22px;
-  font-size: 15px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  font-size: 13px;
+  gap: 6px;
 }
 #commit button.action.icon {
-  width: 44px;
+  width: 36px;
   padding: 0;
 }
+#commit svg { width: 15px; height: 15px; }
 #commit button.action.glass:hover {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.08)),
@@ -407,12 +418,12 @@ body.empty #empty-state .empty-inner { pointer-events: auto; }
 @media (max-width: 520px) {
   button.tool, button.width, button.action.icon { width: 34px; height: 34px; }
   #tools { --tool: 34px; }
-  body[data-dock="top"] #tools { max-width: calc(100% - 196px); }
+  body[data-dock="top"] #tools { max-width: calc(100% - 256px); }
   button.swatch { width: 26px; height: 26px; }
   .divider { display: none; }
   #stylebar { gap: 4px 10px; }
-  #commit button.action { height: 40px; padding: 0 18px; font-size: 14px; }
-  #commit button.action.icon { width: 40px; padding: 0; }
+  #commit button.action { height: 34px; padding: 0 12px; }
+  #commit button.action.icon { width: 34px; padding: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
