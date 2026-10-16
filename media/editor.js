@@ -42,8 +42,6 @@
     ellipse: { label: 'Ellipse', key: 'E', icon: svg('<ellipse cx="12" cy="12" rx="9" ry="6"/>') },
     highlight: { label: 'Highlight', key: 'H', icon: svg('<path d="M9 11l-6 6v3h3l6-6"/><path d="M22 12l-4.5 4.5a2.1 2.1 0 0 1-3 0L9 12l6-6 4.5 4.5a2.1 2.1 0 0 1 0 3z"/>') },
     spotlight: { label: 'Spotlight', key: 'S', icon: svg('<path fill="currentColor" fill-opacity="0.4" stroke="none" fill-rule="evenodd" d="M6 2.5h12A3.5 3.5 0 0 1 21.5 6v12a3.5 3.5 0 0 1-3.5 3.5H6A3.5 3.5 0 0 1 2.5 18V6A3.5 3.5 0 0 1 6 2.5ZM9 7.5A1.5 1.5 0 0 0 7.5 9v6A1.5 1.5 0 0 0 9 16.5h6a1.5 1.5 0 0 0 1.5-1.5V9A1.5 1.5 0 0 0 15 7.5Z"/><rect x="7.5" y="7.5" width="9" height="9" rx="1.5"/>') },
-    measure: { label: 'Measure', key: 'U', icon: svg('<path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/>') },
-    eyedropper: { label: 'Color picker', key: 'I', icon: svg('<path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/>') },
   };
 
   const toolSlots = () => Array.from(document.querySelectorAll('#tools button.tool'));
