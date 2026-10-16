@@ -10,6 +10,7 @@
 - `Cmd/Ctrl + Enter` with no image loaded no longer overwrites your clipboard with a blank image.
 - Windows: clipboard detection uses one background PowerShell process instead of starting a new one every 2.5 seconds.
 - Linux: clipboard tool detection no longer runs on every poll.
+- New two-way arrow tool (`D`), for showing a relationship or a measurement between two points.
 - New shortcuts: `E` for ellipse, `H` for highlight.
 
 ## 1.0.0 — 2026-04-18

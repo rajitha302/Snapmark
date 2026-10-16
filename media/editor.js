@@ -279,7 +279,7 @@
           selectable: false, evented: false,
         });
         c.add(state.currentShape);
-      } else if (state.tool === 'arrow') {
+      } else if (state.tool === 'arrow' || state.tool === 'arrow2') {
         state.currentShape = new fabric.Line([p.x, p.y, p.x, p.y], {
           stroke: state.color, strokeWidth: state.width,
           strokeLineCap: 'round', selectable: false, evented: false,
@@ -346,7 +346,7 @@
           left: Math.min(sp.x, p.x), top: Math.min(sp.y, p.y),
           rx: Math.abs(p.x - sp.x) / 2, ry: Math.abs(p.y - sp.y) / 2,
         });
-      } else if (state.tool === 'arrow') {
+      } else if (state.tool === 'arrow' || state.tool === 'arrow2') {
         s.set({ x2: p.x, y2: p.y });
       }
       c.requestRenderAll();
@@ -384,13 +384,13 @@
         if (s.rx < 2 || s.ry < 2) {
           c.remove(s); state.currentShape = null; return;
         }
-      } else if (state.tool === 'arrow') {
+      } else if (state.tool === 'arrow' || state.tool === 'arrow2') {
         const dx = s.x2 - s.x1;
         const dy = s.y2 - s.y1;
         if (Math.hypot(dx, dy) < 6) {
           c.remove(s); state.currentShape = null; return;
         }
-        const path = new fabric.Path(arrowPath(s.x1, s.y1, s.x2, s.y2, state.width), {
+        const path = new fabric.Path(arrowPath(s.x1, s.y1, s.x2, s.y2, state.width, state.tool === 'arrow2'), {
           stroke: state.color, strokeWidth: state.width, fill: null,
           strokeLineCap: 'round', strokeLineJoin: 'round',
           selectable: false, evented: false,
@@ -406,16 +406,20 @@
     c.on('object:modified', () => snapshot());
   }
 
-  function arrowPath(x1, y1, x2, y2, width) {
-    const angle = Math.atan2(y2 - y1, x2 - x1);
+  function arrowPath(x1, y1, x2, y2, width, twoWay) {
     const headLen = Math.max(14, width * 4);
     const headAngle = Math.PI / 7;
-    const hx1 = x2 - headLen * Math.cos(angle - headAngle);
-    const hy1 = y2 - headLen * Math.sin(angle - headAngle);
-    const hx2 = x2 - headLen * Math.cos(angle + headAngle);
-    const hy2 = y2 - headLen * Math.sin(angle + headAngle);
+    // Head at (tx, ty), pointing away from (fx, fy).
+    const head = (fx, fy, tx, ty) => {
+      const angle = Math.atan2(ty - fy, tx - fx);
+      const hx1 = tx - headLen * Math.cos(angle - headAngle);
+      const hy1 = ty - headLen * Math.sin(angle - headAngle);
+      const hx2 = tx - headLen * Math.cos(angle + headAngle);
+      const hy2 = ty - headLen * Math.sin(angle + headAngle);
+      return ' M ' + hx1 + ' ' + hy1 + ' L ' + tx + ' ' + ty + ' L ' + hx2 + ' ' + hy2;
+    };
     return 'M ' + x1 + ' ' + y1 + ' L ' + x2 + ' ' + y2 +
-           ' M ' + hx1 + ' ' + hy1 + ' L ' + x2 + ' ' + y2 + ' L ' + hx2 + ' ' + hy2;
+           head(x1, y1, x2, y2) + (twoWay ? head(x2, y2, x1, y1) : '');
   }
 
   // Clamp a drag rectangle to the image on all four edges, so dragging past
@@ -708,6 +712,7 @@
       if (k === 'v' || k === 'V') setTool('select');
       else if (k === 'p' || k === 'P') setTool('pen');
       else if (k === 'a' || k === 'A') setTool('arrow');
+      else if (k === 'd' || k === 'D') setTool('arrow2');
       else if (k === 'r' || k === 'R') setTool('rect');
       else if (k === 'e' || k === 'E') setTool('ellipse');
       else if (k === 'h' || k === 'H') setTool('highlight');
