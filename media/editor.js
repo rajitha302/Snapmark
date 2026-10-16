@@ -451,12 +451,46 @@
     });
   }
 
+  // Picking a colour also recolours whatever is selected.
   function setColor(color) {
     state.color = color;
     state.canvas.freeDrawingBrush.color = color;
     document.querySelectorAll('button.swatch').forEach((btn) => {
       btn.setAttribute('aria-pressed', btn.dataset.color === color ? 'true' : 'false');
     });
+    const active = state.canvas.getActiveObject();
+    if (!active) return;
+    const targets = active.type === 'activeSelection' ? active.getObjects() : [active];
+    const changed = targets.filter((o) => recolor(o, color)).length > 0;
+    if (changed) {
+      state.canvas.requestRenderAll();
+      snapshot();
+    }
+  }
+
+  // Apply a colour the way each kind of object was drawn with it. Redactions
+  // stay black so they keep hiding what's under them.
+  function recolor(o, color) {
+    const kind = o.data && o.data.kind;
+    const onColor = isLightColor(color) ? '#1c1c1e' : '#ffffff';
+    if (kind === 'redact') return false;
+    if (o.type === 'commentBubble') {
+      o.set({ backgroundColor: color, fill: onColor });
+    } else if (kind === 'step') {
+      const [circle, label] = o.getObjects();
+      circle.set('fill', color);
+      label.set('fill', onColor);
+      o.dirty = true;
+    } else if (o.type === 'i-text') {
+      o.set('fill', color);
+    } else if (o.type === 'rect' && !o.stroke) {
+      o.set('fill', hexToRgba(color, 0.3)); // highlight
+    } else if (o.stroke) {
+      o.set('stroke', color); // pen, arrows, rectangle, ellipse
+    } else {
+      return false;
+    }
+    return true;
   }
 
   function setWidth(width) {
@@ -877,7 +911,7 @@
     });
     const label = new fabric.Text(String(value), {
       fontSize, fontFamily: 'sans-serif', fontWeight: 'bold',
-      fill: '#ffffff',
+      fill: isLightColor(state.color) ? '#1c1c1e' : '#ffffff',
       originX: 'center', originY: 'center',
       left: 0, top: 0,
     });
