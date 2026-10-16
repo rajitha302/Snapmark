@@ -164,6 +164,10 @@
       { width: state.imgW * effective + 'px', height: state.imgH * effective + 'px' },
       { cssOnly: true }
     );
+    // On HiDPI screens setDimensions re-applies retina scaling, which resets
+    // the canvas bitmap, but cssOnly skips the re-render. Without this the
+    // image stays blank until the next draw.
+    state.canvas.requestRenderAll();
     if (state.pendingCrop) positionCropActions();
   }
 
