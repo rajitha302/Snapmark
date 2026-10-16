@@ -1,7 +1,7 @@
 {
   "name": "snapmark",
   "displayName": "SnapMark - Image Editor",
-  "description": "Annotate screenshots on your clipboard before pasting them into AI chats like Claude, Copilot, and Cursor. Redact sensitive parts, add numbered steps, and resize large images automatically.",
+  "description": "Image editor for annotating screenshots in VS Code. Draw arrows and shapes, highlight, redact, crop, measure and add comments, then paste into Claude, Copilot, Cursor or any AI chat.",
   "version": "1.0.1",
   "publisher": "RajithaDisanayaka",
   "license": "MIT",
@@ -10,32 +10,51 @@
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other",
-    "Visualization"
+    "Visualization",
+    "AI",
+    "Other"
   ],
   "keywords": [
+    "image editor",
+    "image edit",
+    "edit image",
+    "annotate image",
+    "image annotation",
     "annotate",
+    "annotation",
     "screenshot",
+    "screenshot annotation",
+    "image",
+    "png",
+    "draw",
+    "markup",
+    "crop",
+    "redact",
+    "highlight",
+    "arrow",
+    "paint",
+    "measure",
+    "color picker",
     "clipboard",
+    "paste",
     "ai",
+    "llm",
     "claude",
     "copilot",
     "cursor",
-    "markup",
-    "redact",
-    "draw",
-    "paste",
-    "llm"
+    "chatgpt",
+    "codex",
+    "ui review"
   ],
   "galleryBanner": {
-    "color": "#0b4fb3",
+    "color": "#0a0a0f",
     "theme": "dark"
   },
   "qna": "marketplace",
   "bugs": {
     "url": "https://github.com/rajitha302/Snapmark/issues"
   },
-  "homepage": "https://github.com/rajitha302/Snapmark#readme",
+  "homepage": "https://snapmarkapp.netlify.app",
   "activationEvents": [
     "onStartupFinished"
   ],

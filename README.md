@@ -1,6 +1,6 @@
-# Snapmark
+# SnapMark - Image Editor
 
-Annotate screenshots on your clipboard, then paste them into AI chats like Claude, Copilot, and Cursor. Runs locally.
+An image editor for annotating screenshots without leaving VS Code. Draw on the image on your clipboard, then paste it into AI chats like Claude, Copilot, and Cursor. Runs locally.
 
 ## Use it
 
