@@ -26,6 +26,7 @@
     pxScale: 1, // screenshot pixels per CSS pixel, for Measure labels
     tourSeen: true, // until the extension says otherwise
     sampler: null, // { bg, canvas, ctx } holding the background's pixels
+    compare: null, // { w, h } of the original image while a compared one sits beside it
   };
 
   const MIN_ZOOM = 0.2;
@@ -549,6 +550,7 @@
 
   function loadImage(dataUrl) {
     cancelCrop();
+    state.compare = null;
     setPxScale(detectPixelScale(dataUrl));
     fabric.Image.fromURL(dataUrl, (img) => {
       state.imgW = img.width;
@@ -596,6 +598,7 @@
     fabric.util.loadImage(dataUrl, (img) => {
       if (!img || !bg) return;
       const W1 = state.imgW, H1 = state.imgH;
+      if (!state.compare) state.compare = { w: W1, h: H1 };
       const stacked = W1 > H1; // wide screenshots stack, so the result stays near square
       const s = stacked ? W1 / img.width : H1 / img.height;
       const w2 = Math.round(img.width * s), h2 = Math.round(img.height * s);
@@ -651,6 +654,40 @@
       );
     }
     updateHistoryButtons();
+  }
+
+  // Undo a compare: back to the original image (the top-left W×H of the
+  // combined background), dropping the labels and anything drawn only on the
+  // compared side. Like crop, this resets history.
+  function removeCompare() {
+    const cmp = state.compare;
+    const c = state.canvas;
+    const bg = c.backgroundImage;
+    if (!cmp || !bg) return;
+    cancelCrop();
+    const tmp = document.createElement('canvas');
+    tmp.width = cmp.w;
+    tmp.height = cmp.h;
+    tmp.getContext('2d').drawImage(bg.getElement(), 0, 0, cmp.w, cmp.h, 0, 0, cmp.w, cmp.h);
+    fabric.Image.fromURL(tmp.toDataURL('image/png'), (newBg) => {
+      c.discardActiveObject();
+      c.getObjects().slice().forEach((o) => {
+        const b = o.getBoundingRect(true, true);
+        if ((o.data && o.data.compare) || b.left >= cmp.w || b.top >= cmp.h) c.remove(o);
+      });
+      state.imgW = cmp.w;
+      state.imgH = cmp.h;
+      state.compare = null;
+      c.setDimensions({ width: cmp.w, height: cmp.h });
+      c.setBackgroundImage(newBg, () => {
+        state.zoom = 1;
+        applyFitScale();
+        state.history = [serialize()];
+        state.redoStack = [];
+        reseedNumberCounter();
+        updateHistoryButtons();
+      }, { originX: 'left', originY: 'top' });
+    });
   }
 
   // Dropping a file with no image open loads it. With one open, two targets
@@ -1304,6 +1341,7 @@
     const rect = state.pendingCrop;
     const c = state.canvas;
     if (!rect) return;
+    state.compare = null; // the crop redraws the layout; nothing to remove any more
     const left = Math.round(rect.left);
     const top = Math.round(rect.top);
     const width = Math.round(rect.width);
@@ -1430,7 +1468,7 @@
       fontSize, fontWeight: '600', charSpacing: 10,
       fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
       fill: '#ffffff', backgroundColor: color,
-      data: { kind: 'tag' },
+      data: { kind: 'tag', compare: true },
     });
   }
 
@@ -1695,10 +1733,12 @@
     upload.addEventListener('click', () => {
       if (menuOwnerJustClosed(upload)) return;
       if (!state.imgW) { pick('replace'); return; }
-      openMenu([
+      const items = [
         { label: 'Replace image…', icon: 'replace', run: () => pick('replace') },
         { label: 'Compare with another image…', icon: 'compare', run: () => pick('compare') },
-      ], { anchor: upload, side: 'below', align: 'end' });
+      ];
+      if (state.compare) items.push({ label: 'Remove compared image', icon: 'uncompare', run: removeCompare });
+      openMenu(items, { anchor: upload, side: 'below', align: 'end' });
     });
     fileInput.addEventListener('change', () => {
       loadFile(fileInput.files[0], fileInput.dataset.mode);
@@ -1786,6 +1826,7 @@
     tips: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><path d="M12 17h.01"/>'),
     paw: svg('<circle cx="7" cy="9" r="1.6"/><circle cx="11" cy="6" r="1.6"/><circle cx="15.5" cy="6.5" r="1.6"/><circle cx="18.5" cy="10.5" r="1.6"/><path d="M8.5 17c0-2.5 2-5 4.5-5s4.5 2.5 4 5c-.3 1.6-1.8 2.3-4 2.3s-4.2-.7-4.5-2.3Z"/>'),
     hide: svg('<path d="M3 3l18 18"/><path d="M10.6 5.1A9.8 9.8 0 0 1 12 5c5 0 9 5 9 7a10 10 0 0 1-2.3 3.4"/><path d="M6.6 6.6C4.4 8 3 10.5 3 12c0 2 4 7 9 7a9.6 9.6 0 0 0 4.4-1.1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>'),
+    uncompare: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/><path d="m15 9 4 6"/><path d="m19 9-4 6"/>'),
     compare: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>'),
   };
 
@@ -1871,6 +1912,7 @@
       { label: 'Copy image', icon: 'copy', hint: keyHint('⌘⏎', 'Ctrl+Enter'), run: done },
       { label: 'Download PNG…', icon: 'download', run: download }
     );
+    if (state.compare) items.push({ label: 'Remove compared image', icon: 'uncompare', run: removeCompare });
     if (state.zoom !== 1) {
       items.push({ label: 'Fit to window', icon: 'fit', hint: keyHint('⌘0', 'Ctrl+0'), run: resetZoom });
     }
