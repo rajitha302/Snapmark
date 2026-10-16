@@ -1,17 +1,30 @@
+/* Liquid-glass chrome floating over a near-black stage with a faint golden
+   glow. The bars stay readable over bright screenshots because the glass
+   carries a mid-grey tint rather than being fully clear. Gold is the brand
+   accent (from snapmarkapp.netlify.app). */
 :root {
-  --bg: var(--vscode-editor-background, #1e1e1e);
-  --fg: var(--vscode-editor-foreground, #d4d4d4);
-  --toolbar-bg: var(--vscode-titleBar-activeBackground, #2d2d30);
-  --toolbar-border: var(--vscode-panel-border, #3c3c3c);
-  --btn-bg: transparent;
-  --btn-hover: var(--vscode-toolbar-hoverBackground, #3c3c3c);
-  --btn-active: var(--vscode-toolbar-activeBackground, #4c4c50);
-  --btn-active-fg: var(--vscode-button-background, #0e639c);
-  --accent: var(--vscode-button-background, #0e639c);
-  --accent-fg: var(--vscode-button-foreground, #ffffff);
-  --danger: #f85149;
-  --canvas-bg: #0a0a0a;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ink: #f5f5f7;
+  --ink-dim: rgba(245, 245, 247, 0.62);
+  --stage: #0a0a0f;
+  --stage-check: #13131a;
+  --glass-tint: rgba(72, 74, 80, 0.58);
+  --glass-sheen-top: rgba(255, 255, 255, 0.16);
+  --glass-sheen-bottom: rgba(255, 255, 255, 0.03);
+  --glass-edge: rgba(255, 255, 255, 0.22);
+  --glass-solid: #4a4b50;
+  --lens-top: rgba(255, 255, 255, 0.34);
+  --lens-bottom: rgba(255, 255, 255, 0.14);
+  --hover: rgba(255, 255, 255, 0.12);
+  --gold: #e6c36a;
+  --gold-light: #ecdcb2;
+  --gold-ink: #1a1405; /* text on gold */
+  /* A softer take on the site's metallic button gradient, which is too heavy
+     at toolbar size. */
+  --gold-gradient: linear-gradient(#f3e2b3, #e2c47e);
+  --gold-sheen: linear-gradient(rgba(255, 251, 235, 0.35), rgba(255, 251, 235, 0) 50%);
+  --gold-glow: rgba(201, 150, 50, 0.35);
+  --gold-tint: rgba(236, 220, 178, 0.16);
+  --focus: #e6c36a;
 }
 
 * { box-sizing: border-box; }
@@ -20,29 +33,184 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-  font-size: 13px;
   overflow: hidden;
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  background-color: var(--stage);
+  /* The glow sits over the checkerboard, lowest at the bottom right like the
+     site's hero, with a fainter wash from the top. */
+  background-image:
+    radial-gradient(70% 65% at 85% 95%, rgba(212, 175, 55, 0.12), transparent 70%),
+    radial-gradient(ellipse at top, rgba(236, 220, 178, 0.04), transparent 60%),
+    linear-gradient(45deg, var(--stage-check) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--stage-check) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--stage-check) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--stage-check) 75%);
+  background-size: 100% 100%, 100% 100%, 20px 20px, 20px 20px, 20px 20px, 20px 20px;
+  background-position: 0 0, 0 0, 0 0, 0 10px, 10px -10px, -10px 0;
+  background-repeat: no-repeat, no-repeat, repeat, repeat, repeat, repeat;
 }
 
-body {
-  display: flex;
-  flex-direction: column;
+/* ---------------------------------------------------------------------------
+   Glass material
+   ------------------------------------------------------------------------- */
+
+.glass {
+  background:
+    linear-gradient(180deg, var(--glass-sheen-top), var(--glass-sheen-bottom)),
+    var(--glass-tint);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--glass-edge);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+    0 10px 30px rgba(0, 0, 0, 0.28),
+    0 1px 2px rgba(0, 0, 0, 0.22);
 }
 
-#toolbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 12px;
-  background: var(--toolbar-bg);
-  border-bottom: 1px solid var(--toolbar-border);
-  flex-shrink: 0;
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass { background: var(--glass-solid); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: var(--glass-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Layout: bars float above a full-bleed scrolling stage
+   ------------------------------------------------------------------------- */
+
+#topbar {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  right: 12px;
   z-index: 10;
+  display: flex;
   flex-wrap: wrap;
-  box-shadow: var(--shadow);
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+#topbar > * { pointer-events: auto; }
+
+#commit {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* The tool pill docks to any edge (body[data-dock], dragged by its grip).
+   Grid, not column-wrap flex (which Chromium sizes wrongly), so a short or
+   narrow panel spills the tools into a second column/row. auto-fit, not
+   auto-fill, so unused tracks collapse instead of leaving an empty pill. */
+#tools {
+  --tool: 38px;
+  position: fixed;
+  z-index: 10;
+  display: grid;
+  gap: 2px;
+}
+body[data-dock="left"] #tools,
+body[data-dock="right"] #tools {
+  top: 50%;
+  transform: translateY(-50%);
+  grid-auto-flow: column;
+  grid-template-rows: repeat(auto-fit, var(--tool));
+  max-height: calc(100% - 168px);
+}
+body[data-dock="left"] #tools { left: 12px; }
+body[data-dock="right"] #tools { right: 12px; }
+body[data-dock="top"] #tools,
+body[data-dock="bottom"] #tools {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(auto-fit, var(--tool));
+}
+/* Leaves room for upload / Copy / Close at the top right. */
+body[data-dock="top"] #tools { top: 12px; left: 12px; max-width: calc(100% - 276px); }
+/* `bottom` is set in layoutChrome() to sit just above the style bar. */
+body[data-dock="bottom"] #tools { left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); }
+
+#tools.dragging {
+  z-index: 30; /* above the other bars while it's moving */
+  cursor: grabbing;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 24px 48px rgba(0, 0, 0, 0.45);
+}
+
+/* Snap preview shown while dragging the tool pill: where it will land. */
+#dock-hint {
+  position: fixed;
+  z-index: 9;
+  pointer-events: none;
+  border-radius: 26px;
+  border: 2px solid rgba(230, 195, 106, 0.9);
+  background: rgba(236, 220, 178, 0.14);
+  box-shadow: 0 0 0 4px rgba(230, 195, 106, 0.12), 0 0 28px rgba(212, 175, 55, 0.4);
+  opacity: 0;
+  transition: left 0.16s ease, top 0.16s ease, width 0.16s ease, height 0.16s ease, opacity 0.12s ease;
+}
+#dock-hint.visible { opacity: 1; }
+
+button.grip {
+  color: var(--ink-dim);
+  cursor: grab;
+  touch-action: none;
+}
+#tools.dragging button.grip { cursor: grabbing; }
+
+button.tool svg { width: 18px; height: 18px; }
+
+/* A slot holding several tools (arrows, shapes, …): a small corner mark, as
+   in Figma or Photoshop. Clicking the active slot lists them. */
+button.tool[data-group] { position: relative; }
+button.tool[data-group]::after {
+  content: "";
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 5px;
+  height: 5px;
+  background: currentColor;
+  opacity: 0.55;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+
+/* A tool button being dragged to a new place in the pill. */
+button.tool.reordering {
+  cursor: grabbing;
+  transform: scale(1.1);
+  background: linear-gradient(180deg, var(--lens-top), var(--lens-bottom));
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  z-index: 1;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 5px;
+  border-radius: 26px;
+}
+
+#stylebar {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  justify-content: center;
 }
 
 .tool-group {
@@ -53,184 +221,565 @@ body {
 
 .divider {
   width: 1px;
-  height: 22px;
-  background: var(--toolbar-border);
-  margin: 0 4px;
+  height: 24px;
+  margin: 0 6px;
+  background: rgba(255, 255, 255, 0.18);
 }
 
-.spacer { flex: 1; }
+/* Vertical padding is set from the bar heights in applyFitScale(). */
+#canvas-wrap {
+  position: fixed;
+  inset: 0;
+  overflow: auto;
+  display: flex;
+  align-items: safe center;
+  justify-content: safe center;
+  padding: 96px 24px 104px;
+}
+
+.canvas-container {
+  flex-shrink: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 24px 60px rgba(0, 0, 0, 0.42),
+    0 4px 14px rgba(0, 0, 0, 0.25);
+  /* Only visible through transparent pixels in the screenshot. */
+  background-color: #e9e9ec;
+  background-image:
+    linear-gradient(45deg, #d4d4d8 25%, transparent 25%),
+    linear-gradient(-45deg, #d4d4d8 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #d4d4d8 75%),
+    linear-gradient(-45deg, transparent 75%, #d4d4d8 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+body:not(.loaded) .canvas-container { visibility: hidden; }
+
+canvas {
+  display: block;
+  cursor: crosshair;
+}
+
+#canvas-wrap::-webkit-scrollbar { width: 10px; height: 10px; }
+#canvas-wrap::-webkit-scrollbar-track { background: transparent; }
+#canvas-wrap::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background-clip: padding-box;
+}
+#canvas-wrap::-webkit-scrollbar-corner { background: transparent; }
+
+/* ---------------------------------------------------------------------------
+   Buttons
+   ------------------------------------------------------------------------- */
 
 button {
-  font-family: inherit;
-  font-size: 13px;
-  color: var(--fg);
-  background: var(--btn-bg);
-  border: 1px solid transparent;
-  padding: 6px 8px;
-  border-radius: 4px;
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 19px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.1s ease, border-color 0.1s ease;
-  min-width: 30px;
-  min-height: 30px;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease, opacity 0.15s ease;
 }
-button:hover { background: var(--btn-hover); }
-button:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
-button:disabled,
-button[disabled] {
-  opacity: 0.4;
+button svg { filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25)); }
+button:hover { background-color: var(--hover); }
+button:active { transform: scale(0.94); }
+button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+button:disabled {
+  opacity: 0.35;
   cursor: default;
   pointer-events: none;
 }
 
-body.empty #toolbar button {
-  opacity: 0.4;
-  cursor: default;
-  pointer-events: none;
-}
-body.empty #toolbar #btn-cancel {
-  opacity: 1;
-  cursor: pointer;
-  pointer-events: auto;
+/* The selected tool or width sits in a lighter glass lens. */
+button.tool[aria-pressed="true"],
+button.width[aria-pressed="true"] {
+  background: linear-gradient(180deg, var(--lens-top), var(--lens-bottom));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.10),
+    0 2px 8px rgba(0, 0, 0, 0.20);
 }
 
-button.tool[aria-pressed="true"] {
-  background: var(--btn-active);
-  border-color: var(--accent);
-  color: var(--fg);
+/* Pixel density for Measure labels; only shown while measuring. */
+#btn-scale {
+  height: 28px;
+  padding: 0 9px;
+  margin-right: 4px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, 0.10);
+}
+#btn-scale[hidden] { display: none; }
+
+.width-dot {
+  display: inline-block;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
 }
 
 button.swatch {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  padding: 0;
+  width: 28px;
+  height: 28px;
+  margin: 0 3px;
   border-radius: 50%;
   background: var(--swatch);
-  border: 2px solid transparent;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+button.swatch:hover {
+  background: var(--swatch);
+  transform: scale(1.08);
 }
 button.swatch[aria-pressed="true"] {
-  border-color: var(--fg);
-  box-shadow: 0 0 0 1px var(--bg);
-}
-
-button.width {
-  padding: 6px;
-}
-.width-dot {
-  display: inline-block;
-  background: var(--fg);
-  border-radius: 50%;
-}
-button.width[aria-pressed="true"] {
-  background: var(--btn-active);
-  border-color: var(--accent);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.18),
+    0 0 0 2.5px #3c3d42,
+    0 0 0 4.5px var(--ink);
 }
 
 button.action {
-  padding: 6px 12px;
+  width: auto;
+  height: 38px;
+  padding: 0 14px;
+  font-size: 14px;
   font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
+button.action.icon {
+  width: 38px;
+  padding: 0;
+}
+
+#commit button.action {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  font-size: 13px;
+  gap: 6px;
+}
+#commit button.action.icon {
+  width: 36px;
+  padding: 0;
+}
+#commit svg { width: 15px; height: 15px; }
+#commit svg.chev { width: 11px; height: 11px; margin-left: -2px; opacity: 0.7; display: none; }
+body.loaded #commit svg.chev { display: block; }
+#commit button.action.glass:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.08)),
+    var(--glass-tint);
+}
+
+/* The brand's gold button: metallic gradient, top sheen, warm glow. */
 button.action.primary {
-  background: var(--accent);
-  color: var(--accent-fg);
-  border-color: var(--accent);
+  gap: 8px;
+  color: var(--gold-ink);
+  font-weight: 600;
+  background: var(--gold-sheen), var(--gold-gradient);
+  border: 0;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 250, 230, 0.8),
+    inset 0 -1px 0 rgba(90, 60, 15, 0.25),
+    0 1px 0 rgba(0, 0, 0, 0.35),
+    0 6px 16px -8px var(--gold-glow);
 }
+button.action.primary svg { filter: none; }
 button.action.primary:hover {
-  background: var(--vscode-button-hoverBackground, #1177bb);
-  border-color: var(--vscode-button-hoverBackground, #1177bb);
+  background: var(--gold-sheen), var(--gold-gradient);
+  filter: brightness(1.06) saturate(1.05);
 }
-button.action.secondary {
-  background: transparent;
-  border-color: var(--toolbar-border);
-}
-button.action.secondary:hover {
-  background: var(--btn-hover);
-}
+button.action.primary:active { filter: brightness(0.94); }
 
-#canvas-wrap {
-  flex: 1;
-  overflow: auto;
-  background: var(--canvas-bg);
-  background-image:
-    linear-gradient(45deg, #141414 25%, transparent 25%),
-    linear-gradient(-45deg, #141414 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #141414 75%),
-    linear-gradient(-45deg, transparent 75%, #141414 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
-  display: flex;
-  align-items: safe center;
-  justify-content: safe center;
-  position: relative;
-  padding: 24px;
+/* Until an image is loaded, only Close works. */
+body.empty .bar button,
+body.empty #btn-done {
+  opacity: 0.35;
+  pointer-events: none;
 }
+body.empty #tools-grip { opacity: 1; pointer-events: auto; }
 
-canvas {
-  display: block;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
-  cursor: crosshair;
-}
+/* ---------------------------------------------------------------------------
+   Crop confirm + empty state
+   ------------------------------------------------------------------------- */
 
 #crop-actions {
   position: absolute;
+  z-index: 20;
   display: flex;
   gap: 6px;
-  padding: 6px;
-  background: var(--toolbar-bg);
-  border: 1px solid var(--toolbar-border);
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  z-index: 20;
-  pointer-events: auto;
+  padding: 5px;
+  border-radius: 24px;
 }
 #crop-actions[hidden] { display: none; }
+#crop-actions button.action { height: 36px; border-radius: 18px; }
 
 #empty-state {
   position: absolute;
-  inset: 24px;
+  inset: 96px 24px 104px 88px; /* replaced by layoutChrome() */
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--vscode-descriptionForeground, #858585);
+  color: var(--ink-dim);
   font-size: 13px;
   pointer-events: none;
-  border-radius: 10px;
 }
 body.loaded #empty-state { display: none; }
-body.empty #empty-state {
-  border: 2px dashed var(--toolbar-border);
-  background: rgba(20, 20, 20, 0.55);
-}
-body.empty #canvas-wrap.dragging #empty-state {
-  border-color: var(--accent);
-  background: rgba(14, 99, 156, 0.18);
-  color: var(--fg);
-}
+
 .empty-inner {
   text-align: center;
-  padding: 24px 32px;
+  padding: 28px 40px;
+  border-radius: 24px;
+  border: 1px dashed rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+#canvas-wrap.dragging .empty-inner {
+  border-color: var(--focus);
+  background: var(--gold-tint);
 }
 .empty-title {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
-  color: var(--fg);
-  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-bottom: 4px;
 }
 .empty-sub {
-  font-size: 12px;
-  color: var(--vscode-descriptionForeground, #858585);
-  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--ink-dim);
+  margin-bottom: 18px;
 }
-body.empty #empty-state .empty-inner,
-body.empty #empty-state #empty-pick {
-  pointer-events: auto;
-}
+body.empty #empty-state .empty-inner { pointer-events: auto; }
 #empty-pick {
-  min-height: 32px;
-  padding: 6px 16px;
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 18px;
   font-weight: 500;
+}
+
+/* ---------------------------------------------------------------------------
+   Context menu
+   ------------------------------------------------------------------------- */
+
+#context-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 220px;
+  padding: 5px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  /* Darker than the bars: menu text has to stay readable over anything. */
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02)),
+    rgba(40, 41, 46, 0.82);
+  animation: menu-in 0.12s ease-out;
+  transform-origin: top left;
+}
+#context-menu[hidden] { display: none; }
+#context-menu:focus { outline: none; }
+@keyframes menu-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+button.menu-item {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  justify-content: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+button.menu-item svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  filter: none;
+  opacity: 0.85;
+}
+button.menu-item:active { transform: none; }
+.menu-label { flex: 1; text-align: left; }
+.menu-hint {
+  margin-left: 20px;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+button.menu-item:hover,
+button.menu-item:focus-visible {
+  background: rgba(236, 220, 178, 0.18);
+  color: #fff;
+  outline: none;
+}
+button.menu-item:hover .menu-hint,
+button.menu-item:focus-visible .menu-hint { color: rgba(255, 255, 255, 0.8); }
+button.menu-item.danger { color: #ff6961; }
+button.menu-item.danger:hover,
+button.menu-item.danger:focus-visible { background: #ff3b30; color: #fff; }
+button.menu-item[aria-checked="true"] { font-weight: 600; }
+button.menu-item[aria-checked="true"] svg { color: var(--gold); opacity: 1; }
+.menu-sep {
+  height: 1px;
+  margin: 5px 8px;
+  background: rgba(255, 255, 255, 0.14);
+}
+@media (prefers-reduced-transparency: reduce) {
+  #context-menu { background: var(--glass-solid); }
+}
+
+/* Typing over a measurement's label (positioned and coloured from editor.js). */
+#measure-edit {
+  position: fixed;
+  z-index: 55;
+  transform: translate(-50%, -50%);
+  padding: 0.2em 0.6em;
+  line-height: 1.2;
+  resize: none;
+  overflow: hidden;
+  border: 2px solid;
+  border-radius: 999px;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-weight: 600;
+  text-align: center;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(230, 195, 106, 0.6), 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+/* ---------------------------------------------------------------------------
+   Loupe (Measure, color picker) and the drop targets for a second image
+   ------------------------------------------------------------------------- */
+
+#loupe {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+#loupe[hidden] { display: none; }
+#loupe canvas {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.45);
+  image-rendering: pixelated;
+}
+.loupe-label {
+  padding: 3px 9px;
+  border-radius: 10px;
+  background: rgba(28, 28, 30, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  font: 600 12px Menlo, Consolas, monospace;
+}
+.loupe-label[hidden] { display: none; }
+
+#drop-zones {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.45);
+}
+#drop-zones[hidden] { display: none; }
+.drop-zone {
+  width: min(220px, 29vw);
+  padding: 28px 16px;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  transition: transform 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+}
+.drop-zone svg { margin-bottom: 6px; opacity: 0.9; }
+.drop-zone > * { pointer-events: none; } /* so dragover's target is the zone */
+.drop-zone.over {
+  transform: scale(1.04);
+  border-color: rgba(230, 195, 106, 0.9);
+  background: rgba(236, 220, 178, 0.2);
+  box-shadow: 0 0 0 4px rgba(230, 195, 106, 0.16), 0 0 32px rgba(212, 175, 55, 0.4);
+}
+.drop-title { font-size: 15px; font-weight: 600; }
+.drop-sub { font-size: 12px; color: var(--ink-dim); }
+
+/* ---------------------------------------------------------------------------
+   Pet (snapmark.pet): pixel art drawn on a small canvas by editor.js
+   ------------------------------------------------------------------------- */
+
+#pet {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9; /* behind the bars, so it walks behind a bottom-docked pill */
+  width: 52px;
+  height: 48px;
+  cursor: pointer;
+  will-change: transform;
+  transition: opacity 0.15s ease;
+}
+#pet[hidden], #pet-home[hidden] { display: none; }
+/* Its cushion or dog house, at home, behind it. */
+#pet-home {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 8;
+  pointer-events: none;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.3));
+  transition: opacity 0.15s ease;
+}
+/* A soft shadow on the floor under it. */
+#pet::before {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: -3px;
+  height: 7px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0));
+}
+#pet canvas {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+#pet.hop canvas { animation: pet-hop 0.45s cubic-bezier(0.3, 0.7, 0.4, 1); }
+@keyframes pet-hop {
+  0%, 100% { translate: 0 0; }
+  45% { translate: 0 -11px; }
+}
+#tools.dragging ~ #pet, #tools.dragging ~ #pet-home { opacity: 0; } /* while the pill moves */
+
+/* ---------------------------------------------------------------------------
+   First-run tour
+   ------------------------------------------------------------------------- */
+
+#tour {
+  position: fixed;
+  z-index: 60;
+  width: 264px;
+  padding: 14px 16px 12px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02)),
+    rgba(40, 41, 46, 0.9);
+  animation: tour-in 0.18s ease-out;
+}
+#tour[hidden] { display: none; }
+@keyframes tour-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+/* Arrow: a rotated square on the edge facing the target. */
+#tour::before {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: rgb(52, 53, 58);
+  border: 1px solid var(--glass-edge);
+  transform: rotate(45deg);
+}
+#tour[data-side="right"]::before { left: -7px; top: calc(var(--arrow-y) - 6px); border-top: 0; border-right: 0; }
+#tour[data-side="left"]::before { right: -7px; top: calc(var(--arrow-y) - 6px); border-bottom: 0; border-left: 0; }
+#tour[data-side="below"]::before { top: -7px; left: calc(var(--arrow-x) - 6px); border-bottom: 0; border-right: 0; }
+#tour[data-side="above"]::before { bottom: -7px; left: calc(var(--arrow-x) - 6px); border-top: 0; border-left: 0; }
+#tour[data-side="center"]::before { display: none; }
+.tour-step {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-dim);
+  margin-bottom: 4px;
+}
+.tour-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.tour-body {
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(245, 245, 247, 0.85);
+}
+.tour-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 12px;
+}
+#tour button.action {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 15px;
+  font-size: 13px;
+}
+#tour button[hidden] { display: none; }
+#tour-skip { color: var(--ink-dim); }
+/* What the current tip points at. */
+.tour-target {
+  outline: 2px solid rgba(230, 195, 106, 0.9);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 7px rgba(230, 195, 106, 0.16), 0 0 28px rgba(212, 175, 55, 0.35);
+}
+#btn-done.tour-target { box-shadow: 0 0 0 7px rgba(230, 195, 106, 0.16), 0 6px 16px -8px var(--gold-glow); }
+
+/* Narrow panels: tighter buttons so the tools fit on one row, and no
+   dividers, which would dangle at the end of a wrapped row. */
+@media (max-width: 520px) {
+  button.tool, button.width, button.action.icon { width: 34px; height: 34px; }
+  #tools { --tool: 34px; }
+  body[data-dock="top"] #tools { max-width: calc(100% - 256px); }
+  button.swatch { width: 26px; height: 26px; }
+  .divider { display: none; }
+  #stylebar { gap: 4px 10px; }
+  #commit button.action { height: 34px; padding: 0 12px; }
+  #commit button.action.icon { width: 34px; padding: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #context-menu, #tour { animation: none; }
+  #dock-hint { transition: none; }
+  .drop-zone { transition: none; }
+  #pet { transition: none; }
+  #pet.hop canvas { animation: none; }
+  .drop-zone.over { transform: none; }
+  button { transition: none; }
+  button:active, button.swatch:hover { transform: none; }
 }

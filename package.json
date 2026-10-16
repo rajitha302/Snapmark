@@ -1,8 +1,8 @@
 {
   "name": "snapmark",
-  "displayName": "Snapmark",
-  "description": "Annotate screenshots on your clipboard before pasting them into AI chats like Claude, Copilot, and Cursor. Redact sensitive parts, add numbered steps, and resize large images automatically.",
-  "version": "1.0.0",
+  "displayName": "SnapMark - Image Editor & Annotator",
+  "description": "Image editor for annotating screenshots in VS Code. Draw arrows and shapes, highlight, redact, crop, measure and add comments, then paste into Claude, Copilot, Cursor or any AI chat.",
+  "version": "1.0.1",
   "publisher": "RajithaDisanayaka",
   "license": "MIT",
   "icon": "media/Logo.png",
@@ -10,32 +10,51 @@
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other",
-    "Visualization"
+    "Visualization",
+    "AI",
+    "Other"
   ],
   "keywords": [
+    "image editor",
+    "image edit",
+    "edit image",
+    "annotate image",
+    "image annotation",
     "annotate",
+    "annotation",
     "screenshot",
+    "screenshot annotation",
+    "image",
+    "png",
+    "draw",
+    "markup",
+    "crop",
+    "redact",
+    "highlight",
+    "arrow",
+    "paint",
+    "measure",
+    "color picker",
     "clipboard",
+    "paste",
     "ai",
+    "llm",
     "claude",
     "copilot",
     "cursor",
-    "markup",
-    "redact",
-    "draw",
-    "paste",
-    "llm"
+    "chatgpt",
+    "codex",
+    "ui review"
   ],
   "galleryBanner": {
-    "color": "#0b4fb3",
+    "color": "#0a0a0f",
     "theme": "dark"
   },
   "qna": "marketplace",
   "bugs": {
     "url": "https://github.com/rajitha302/Snapmark/issues"
   },
-  "homepage": "https://github.com/rajitha302/Snapmark#readme",
+  "homepage": "https://snapmarkapp.netlify.app",
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -61,13 +80,28 @@
         "snapmark.clipboardDetection": {
           "type": "boolean",
           "default": true,
-          "description": "Watch the clipboard while VS Code is focused and highlight the Snapmark status-bar item when a screenshot is detected."
+          "description": "Watch the clipboard and highlight the Snapmark status-bar item when a new screenshot is detected."
         },
         "snapmark.maxDimension": {
           "type": "number",
           "default": 1920,
           "minimum": 0,
           "description": "Maximum pixel dimension (width or height) when copying to clipboard. Larger screenshots are downscaled proportionally to reduce LLM token cost and upload latency. Set to 0 to disable."
+        },
+        "snapmark.pet": {
+          "type": "string",
+          "enum": [
+            "cat",
+            "dog",
+            "off"
+          ],
+          "enumDescriptions": [
+            "A pixel-art cat sits by the toolbar.",
+            "A pixel-art dog sits by the toolbar.",
+            "No pet."
+          ],
+          "default": "cat",
+          "description": "A small pixel-art pet that keeps you company by the editor's toolbar. Click it to pet it; right-click it to switch or hide it."
         }
       }
     }

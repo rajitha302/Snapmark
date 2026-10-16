@@ -1,7 +1,7 @@
 'use strict';
 
 const vscode = require('vscode');
-const { execFile, execFileSync } = require('child_process');
+const { execFile, execFileSync, spawn } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs');
 const path = require('path');
@@ -12,6 +12,8 @@ const execFileP = promisify(execFile);
 let statusBarItem;
 let currentPanel = null;
 let linuxBannerShown = false;
+let linuxToolCache; // undefined = not detected yet
+let winProbe = null;
 let outputChannel = null;
 
 const POLL_INTERVAL_MS = 2500;
@@ -141,7 +143,7 @@ async function readWindows() {
     const { stdout } = await execFileP('powershell.exe', [
       '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
       '-File', scriptPath,
-    ]);
+    ], { windowsHide: true });
     if (!stdout || !stdout.trim().startsWith('ok')) return null;
     const buf = await fs.promises.readFile(tmp);
     return buf && buf.length > 0 ? buf : null;
@@ -162,7 +164,7 @@ async function writeWindows(buf) {
     await execFileP('powershell.exe', [
       '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
       '-File', scriptPath,
-    ]);
+    ], { windowsHide: true });
   } finally {
     fs.promises.unlink(tmp).catch(() => {});
     fs.promises.unlink(scriptPath).catch(() => {});
@@ -182,12 +184,18 @@ function hasCmd(cmd) {
   }
 }
 
+// Cached so the 2.5s poll doesn't run `which` synchronously on the extension
+// host. annotateCommand clears it, so installing a tool takes effect on the
+// next annotate.
 function linuxTool() {
+  if (linuxToolCache !== undefined) return linuxToolCache;
   const isWayland = !!process.env.WAYLAND_DISPLAY;
-  if (isWayland && hasCmd('wl-paste') && hasCmd('wl-copy')) return 'wl';
-  if (hasCmd('xclip')) return 'xclip';
-  if (hasCmd('wl-paste') && hasCmd('wl-copy')) return 'wl';
-  return null;
+  const hasWl = () => hasCmd('wl-paste') && hasCmd('wl-copy');
+  if (isWayland && hasWl()) linuxToolCache = 'wl';
+  else if (hasCmd('xclip')) linuxToolCache = 'xclip';
+  else if (hasWl()) linuxToolCache = 'wl';
+  else linuxToolCache = null;
+  return linuxToolCache;
 }
 
 function showLinuxBanner() {
@@ -410,19 +418,9 @@ async function probeClipboardSnapshot() {
   }
   if (process.platform === 'win32') {
     try {
-      const script =
-        "Add-Type -MemberDefinition '[DllImport(\"user32.dll\")] public static extern uint GetClipboardSequenceNumber();' -Name SnapmarkClip -Namespace Win32 -ErrorAction SilentlyContinue; " +
-        "Add-Type -AssemblyName System.Windows.Forms; " +
-        "$seq = [Win32.SnapmarkClip]::GetClipboardSequenceNumber(); " +
-        "$has = [System.Windows.Forms.Clipboard]::ContainsImage(); " +
-        "Write-Output \"$seq|$($has.ToString())\"";
-      const { stdout } = await execFileP('powershell.exe', [
-        '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script,
-      ]);
-      const parts = (stdout || '').trim().split('|');
-      const sig = parts[0] || 'unknown';
-      const hasImage = parts[1] === 'True';
-      return { hasImage, signature: sig };
+      const [sig, has] = (await winProbeRequest()).split('|');
+      if (!sig || sig === 'err') return { hasImage: false, signature: 'err' };
+      return { hasImage: has === 'True', signature: sig };
     } catch {
       return { hasImage: false, signature: 'err' };
     }
@@ -456,6 +454,90 @@ async function probeClipboardSnapshot() {
   return { hasImage: false, signature: 'unsupported' };
 }
 
+// Windows probe: one long-lived PowerShell reading commands from stdin.
+// Spawning powershell.exe and compiling the P/Invoke type on every poll costs
+// hundreds of ms of CPU; this pays it once. Each probe writes one command and
+// reads back one `snapmark:` line, so responses match requests in FIFO order.
+const WIN_PROBE_PREFIX = 'snapmark:';
+const WIN_PROBE_TIMEOUT_MS = 10000;
+const WIN_PROBE_SETUP = [
+  'Add-Type -AssemblyName System.Windows.Forms',
+  `Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();' -Name SnapmarkClip -Namespace Win32`,
+];
+const WIN_PROBE_CMD =
+  `try { Write-Output ('${WIN_PROBE_PREFIX}' + [Win32.SnapmarkClip]::GetClipboardSequenceNumber() + '|' + [System.Windows.Forms.Clipboard]::ContainsImage()) } catch { Write-Output '${WIN_PROBE_PREFIX}err' }`;
+
+function startWinProbe() {
+  const child = spawn('powershell.exe', [
+    '-NoProfile', '-NonInteractive', '-Sta', '-ExecutionPolicy', 'Bypass', '-Command', '-',
+  ], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
+  const probe = { child, pending: [], buf: '' };
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', (chunk) => {
+    probe.buf += chunk;
+    let i;
+    while ((i = probe.buf.indexOf('\n')) >= 0) {
+      const line = probe.buf.slice(0, i).trim();
+      probe.buf = probe.buf.slice(i + 1);
+      if (!line.startsWith(WIN_PROBE_PREFIX)) continue;
+      const cb = probe.pending.shift();
+      if (cb) cb(null, line.slice(WIN_PROBE_PREFIX.length));
+    }
+  });
+  child.on('error', (err) => stopWinProbe(probe, err));
+  child.on('exit', () => stopWinProbe(probe, new Error('probe exited')));
+  child.stdin.on('error', () => {}); // EPIPE after the process dies; 'exit' handles it
+  child.stdin.write(WIN_PROBE_SETUP.join('\n') + '\n');
+  log('windows probe started');
+  return probe;
+}
+
+function stopWinProbe(probe, err) {
+  if (winProbe === probe) winProbe = null;
+  probe.child.kill();
+  probe.pending.splice(0).forEach((cb) => cb(err || new Error('probe stopped')));
+}
+
+function winProbeRequest() {
+  if (!winProbe) winProbe = startWinProbe();
+  const probe = winProbe;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => stopWinProbe(probe, new Error('probe timeout')),
+      WIN_PROBE_TIMEOUT_MS
+    );
+    probe.pending.push((err, line) => {
+      clearTimeout(timer);
+      if (err) reject(err);
+      else resolve(line);
+    });
+    probe.child.stdin.write(WIN_PROBE_CMD + '\n');
+  });
+}
+
+// "Download PNG…" from the editor's context menu. Webviews can't download
+// files themselves, so the host shows the save dialog and writes the file.
+async function saveImage(dataUrl) {
+  const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+  if (!base64) {
+    vscode.window.showErrorMessage('Snapmark: empty image from editor');
+    return;
+  }
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  const uri = await vscode.window.showSaveDialog({
+    defaultUri: vscode.Uri.file(path.join(os.homedir(), 'Downloads', `snapmark-${stamp}.png`)),
+    filters: { 'PNG image': ['png'] },
+    saveLabel: 'Save',
+  });
+  if (!uri) return;
+  await vscode.workspace.fs.writeFile(uri, Buffer.from(base64, 'base64'));
+  const choice = await vscode.window.showInformationMessage(
+    `Snapmark: saved ${path.basename(uri.fsPath)}`,
+    'Reveal'
+  );
+  if (choice === 'Reveal') vscode.commands.executeCommand('revealFileInOS', uri);
+}
+
 // -----------------------------------------------------------------------------
 // Command
 // -----------------------------------------------------------------------------
@@ -466,8 +548,27 @@ async function annotateCommand(context) {
     return;
   }
 
-  if (currentPanel && currentPanel.visible) {
-    currentPanel.dispose();
+  linuxToolCache = undefined;
+
+  // Mark the current clipboard content as handled so reopening the editor
+  // or closing without Copy doesn't re-arm the same image.
+  const prevSignature = lastSignature;
+  const snap = await probeClipboardSnapshot();
+  lastSignature = snap.signature;
+
+  if (currentPanel) {
+    currentPanel.reveal(vscode.ViewColumn.Active);
+    // Polling is off while the panel is open, so prevSignature is the
+    // clipboard as of the last load. Only replace the in-progress
+    // annotations if a different image has been copied since.
+    if (!snap.hasImage || snap.signature === prevSignature) return;
+    const buf = await readClipboardPng();
+    if (buf) {
+      currentPanel.webview.postMessage({
+        type: 'loadImage',
+        dataUrl: 'data:image/png;base64,' + buf.toString('base64'),
+      });
+    }
     return;
   }
 
@@ -475,19 +576,6 @@ async function annotateCommand(context) {
   const dataUrl = pngBuffer
     ? 'data:image/png;base64,' + pngBuffer.toString('base64')
     : null;
-
-  // Mark the current clipboard content as handled so reopening the editor
-  // or closing without Copy doesn't re-arm the same image.
-  try {
-    const snap = await probeClipboardSnapshot();
-    lastSignature = snap.signature;
-  } catch {}
-
-  if (currentPanel) {
-    currentPanel.reveal(vscode.ViewColumn.Active);
-    currentPanel.webview.postMessage({ type: 'loadImage', dataUrl });
-    return;
-  }
 
   const panel = vscode.window.createWebviewPanel(
     'snapmark.editor',
@@ -511,8 +599,32 @@ async function annotateCommand(context) {
         const maxDimension = vscode.workspace
           .getConfiguration('snapmark')
           .get('maxDimension', 1920);
-        panel.webview.postMessage({ type: 'config', maxDimension });
+        const toolsDock = context.globalState.get('snapmark.toolsDock', 'left');
+        const toolsOrder = context.globalState.get('snapmark.toolsOrder', null);
+        const tourSeen = context.globalState.get('snapmark.tourSeen', false);
+        const pet = vscode.workspace.getConfiguration('snapmark').get('pet', 'cat');
+        panel.webview.postMessage({ type: 'config', maxDimension, toolsDock, toolsOrder, tourSeen, pet });
         panel.webview.postMessage({ type: 'loadImage', dataUrl });
+      } else if (msg.type === 'toolsDock') {
+        if (['left', 'right', 'top', 'bottom'].includes(msg.dock)) {
+          context.globalState.update('snapmark.toolsDock', msg.dock);
+        }
+      } else if (msg.type === 'setPet') {
+        if (!['cat', 'dog', 'off'].includes(msg.pet)) return;
+        await vscode.workspace.getConfiguration('snapmark').update('pet', msg.pet, vscode.ConfigurationTarget.Global);
+        if (msg.pet === 'off') {
+          const choice = await vscode.window.showInformationMessage(
+            'Snapmark: pet hidden. You can bring it back in Settings (Snapmark: Pet).',
+            'Open Settings'
+          );
+          if (choice) vscode.commands.executeCommand('workbench.action.openSettings', 'snapmark.pet');
+        }
+      } else if (msg.type === 'tourSeen') {
+        context.globalState.update('snapmark.tourSeen', true);
+      } else if (msg.type === 'toolsOrder') {
+        if (Array.isArray(msg.order) && msg.order.length <= 50 && msg.order.every((t) => typeof t === 'string')) {
+          context.globalState.update('snapmark.toolsOrder', msg.order);
+        }
       } else if (msg.type === 'done') {
         const base64 = String(msg.dataUrl || '').replace(/^data:image\/png;base64,/, '');
         if (!base64) {
@@ -527,6 +639,8 @@ async function annotateCommand(context) {
         } catch {}
         flashCopied();
         panel.dispose();
+      } else if (msg.type === 'download') {
+        await saveImage(String(msg.dataUrl || ''));
       } else if (msg.type === 'cancel') {
         panel.dispose();
       }
@@ -571,6 +685,10 @@ function activate(context) {
         .get('maxDimension', 1920);
       currentPanel.webview.postMessage({ type: 'config', maxDimension });
     }
+    if (e.affectsConfiguration('snapmark.pet') && currentPanel) {
+      const pet = vscode.workspace.getConfiguration('snapmark').get('pet', 'cat');
+      currentPanel.webview.postMessage({ type: 'config', pet });
+    }
   });
 
   startPolling();
@@ -580,13 +698,16 @@ function activate(context) {
     statusBarItem,
     cmd,
     cfgDisp,
-    outputChannel,
-    { dispose: stopPolling }
+    { dispose: stopPolling },
+    { dispose: () => winProbe && stopWinProbe(winProbe) },
+    // Last: subscriptions are disposed in order, and stopPolling logs.
+    outputChannel
   );
 }
 
 function deactivate() {
   stopPolling();
+  if (winProbe) stopWinProbe(winProbe);
   if (currentPanel) currentPanel.dispose();
 }
 
