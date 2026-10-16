@@ -6,7 +6,7 @@ Annotate screenshots on your clipboard, then paste them into AI chats like Claud
 
 Copy an image. A pencil lights up in your VS Code status bar. Click it, draw on the screenshot, hit **Copy**. Paste into your chat.
 
-If there is no image on the clipboard, click the pencil anyway. You can drag an image file in, paste one with `Cmd+V`, or pick a file from your computer.
+If there is no image on the clipboard, click the pencil anyway. You can drag an image file in, paste one with `Cmd+V`, or pick a file from your computer. To switch to a different image partway through, use the upload button next to **Copy**.
 
 ## Features
 

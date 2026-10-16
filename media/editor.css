@@ -91,7 +91,7 @@ html, body {
 
 #commit {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   margin-left: auto;
 }
 
@@ -260,13 +260,13 @@ button.action.icon {
 }
 
 #commit button.action {
-  height: 46px;
-  padding: 0 22px;
-  border-radius: 23px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
   font-size: 15px;
 }
 #commit button.action.icon {
-  width: 46px;
+  width: 44px;
   padding: 0;
 }
 #commit button.action.glass:hover {

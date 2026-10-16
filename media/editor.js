@@ -69,6 +69,7 @@
   }
 
   function loadImage(dataUrl) {
+    cancelCrop();
     fabric.Image.fromURL(dataUrl, (img) => {
       state.imgW = img.width;
       state.imgH = img.height;
@@ -79,15 +80,22 @@
         state.canvas.renderAll.bind(state.canvas),
         { originX: 'left', originY: 'top' }
       );
+      state.zoom = 1;
       applyFitScale();
       state.history = [serialize()];
       state.redoStack = [];
       state.numberCounter = 1;
-      state.zoom = 1;
       updateHistoryButtons();
       document.body.classList.add('loaded');
       document.body.classList.remove('empty');
     });
+  }
+
+  function loadFile(file) {
+    if (!file || !file.type || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => loadImage(reader.result);
+    reader.readAsDataURL(file);
   }
 
   function showEmptyState() {
@@ -101,18 +109,10 @@
           '<div class="empty-title">Drop an image here</div>' +
           '<div class="empty-sub">or paste from clipboard (' + pasteKey + ')</div>' +
           '<button id="empty-pick" class="action glass" type="button">Choose file…</button>' +
-          '<input id="empty-file" type="file" accept="image/*" hidden />' +
         '</div>';
-      const fileInput = document.getElementById('empty-file');
-      const pickBtn = document.getElementById('empty-pick');
-      pickBtn.addEventListener('click', () => fileInput.click());
-      fileInput.addEventListener('change', (e) => {
-        const file = e.target.files && e.target.files[0];
-        if (!file || !file.type.startsWith('image/')) return;
-        const reader = new FileReader();
-        reader.onload = () => loadImage(reader.result);
-        reader.readAsDataURL(file);
-      });
+      document.getElementById('empty-pick').addEventListener('click', () =>
+        document.getElementById('file-input').click()
+      );
     }
     updateHistoryButtons();
   }
@@ -129,11 +129,7 @@
     wrap.addEventListener('drop', (e) => {
       stop(e);
       wrap.classList.remove('dragging');
-      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (!file || !file.type || !file.type.startsWith('image/')) return;
-      const reader = new FileReader();
-      reader.onload = () => loadImage(reader.result);
-      reader.readAsDataURL(file);
+      loadFile(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]);
     });
     document.addEventListener('paste', (e) => {
       const items = e.clipboardData && e.clipboardData.items;
@@ -144,9 +140,7 @@
           const file = it.getAsFile();
           if (!file) continue;
           e.preventDefault();
-          const reader = new FileReader();
-          reader.onload = () => loadImage(reader.result);
-          reader.readAsDataURL(file);
+          loadFile(file);
           return;
         }
       }
@@ -678,6 +672,12 @@
     document.getElementById('btn-clear').addEventListener('click', clearAll);
     document.getElementById('btn-done').addEventListener('click', done);
     document.getElementById('btn-cancel').addEventListener('click', cancel);
+    const fileInput = document.getElementById('file-input');
+    document.getElementById('btn-upload').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      loadFile(fileInput.files[0]);
+      fileInput.value = ''; // so picking the same file again still fires change
+    });
     document.getElementById('crop-apply').addEventListener('click', applyCrop);
     document.getElementById('crop-cancel').addEventListener('click', cancelCrop);
   }
