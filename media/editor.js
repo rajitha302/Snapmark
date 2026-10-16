@@ -129,6 +129,7 @@
     });
 
     attachDropAndPaste();
+    attachContextMenu();
 
     window.addEventListener('resize', () => {
       layoutChrome();
@@ -744,6 +745,9 @@
         c.add(path);
         state.currentShape = path;
       }
+      // Shapes are added at zero size and grown while dragging; refresh their
+      // hit-test coords or only the starting corner is clickable.
+      state.currentShape.setCoords();
       snapshot();
       state.currentShape = null;
     });
@@ -1037,23 +1041,33 @@
     state.numberCounter = max + 1;
   }
 
-  function done() {
-    if (!state.imgW) return;
+  function exportPng(multiplier) {
     const c = state.canvas;
     cancelCrop();
     c.discardActiveObject();
     // The editing-exited handler removes empty comments a tick later; export
-    // now, so drop them here or the placeholder bubble would be copied.
+    // now, so drop them here or the placeholder bubble would be exported.
     c.getObjects()
       .filter((o) => o.type === 'commentBubble' && !o.text.trim())
       .forEach((o) => c.remove(o));
     c.requestRenderAll();
+    return c.toDataURL({ format: 'png', multiplier });
+  }
+
+  // Copy: downscaled to maxDimension to save vision-model tokens.
+  function done() {
+    if (!state.imgW) return;
     const longEdge = Math.max(state.imgW, state.imgH);
     const multiplier = state.maxDimension > 0 && longEdge > state.maxDimension
       ? state.maxDimension / longEdge
       : 1;
-    const dataUrl = c.toDataURL({ format: 'png', multiplier });
-    vscode.postMessage({ type: 'done', dataUrl });
+    vscode.postMessage({ type: 'done', dataUrl: exportPng(multiplier) });
+  }
+
+  // Download: full resolution; the extension shows the save dialog.
+  function download() {
+    if (!state.imgW) return;
+    vscode.postMessage({ type: 'download', dataUrl: exportPng(1) });
   }
 
   function cancel() {
@@ -1073,6 +1087,17 @@
     document.getElementById('btn-undo').addEventListener('click', undo);
     document.getElementById('btn-redo').addEventListener('click', redo);
     document.getElementById('btn-clear').addEventListener('click', clearAll);
+    document.getElementById('btn-delete').addEventListener('click', () => {
+      const active = state.canvas.getActiveObject();
+      if (active) removeObjects(active.type === 'activeSelection' ? active.getObjects() : [active]);
+    });
+    // Delete is only usable while something is selected.
+    const syncDelete = () => {
+      document.getElementById('btn-delete').disabled = !state.canvas.getActiveObject();
+    };
+    ['selection:created', 'selection:updated', 'selection:cleared', 'object:removed'].forEach((ev) =>
+      state.canvas.on(ev, syncDelete)
+    );
     document.getElementById('btn-done').addEventListener('click', done);
     document.getElementById('btn-cancel').addEventListener('click', cancel);
     const fileInput = document.getElementById('file-input');
@@ -1133,15 +1158,192 @@
       else if (k === 'Delete' || k === 'Backspace') {
         const obj = state.canvas.getActiveObject();
         if (!obj) return;
-        if (obj.type === 'activeSelection') {
-          obj.forEachObject((o) => state.canvas.remove(o));
-          state.canvas.discardActiveObject();
-        } else {
-          state.canvas.remove(obj);
-        }
-        snapshot();
+        removeObjects(obj.type === 'activeSelection' ? obj.getObjects() : [obj]);
       }
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Context menu: replaces the webview's default Cut/Copy/Paste menu, except
+  // while typing in a text or comment, where the native text menu is kept.
+  // ---------------------------------------------------------------------------
+
+  const IS_MAC = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const keyHint = (mac, other) => (IS_MAC ? mac : other);
+  const svg = (body) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + '</svg>';
+  const MENU_ICONS = {
+    edit: svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>'),
+    duplicate: svg('<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/>'),
+    front: svg('<path d="m12 3 9 5-9 5-9-5Z"/><path d="m3 13 9 5 9-5" opacity="0.45"/>'),
+    back: svg('<path d="m3 8 9 5 9-5" opacity="0.45"/><path d="m12 11 9 5-9 5-9-5Z"/>'),
+    trash: svg('<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/>'),
+    undo: svg('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
+    redo: svg('<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>'),
+    copy: svg('<rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+    download: svg('<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>'),
+    fit: svg('<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>'),
+    clear: svg('<path d="m7 21-4-4L14 6l4 4L7 21Z"/><path d="M11 21h10"/>'),
+  };
+
+  function removeObjects(objs) {
+    const c = state.canvas;
+    c.discardActiveObject();
+    objs.forEach((o) => c.remove(o));
+    c.requestRenderAll();
+    snapshot();
+  }
+
+  function duplicateObjects(objs) {
+    const c = state.canvas;
+    c.discardActiveObject(); // so members of a selection are in canvas coordinates
+    const clones = [];
+    objs.forEach((o) => o.clone((copy) => {
+      copy.set({ left: copy.left + 24, top: copy.top + 24 });
+      copy.selectable = copy.evented = isInteractive(copy);
+      c.add(copy);
+      clones.push(copy);
+      if (clones.length < objs.length) return;
+      if (state.tool === 'select') {
+        c.setActiveObject(clones.length === 1 ? clones[0] : new fabric.ActiveSelection(clones, { canvas: c }));
+      }
+      c.requestRenderAll();
+      snapshot();
+    }, ['data']));
+  }
+
+  function restack(objs, toFront) {
+    const c = state.canvas;
+    const active = c.getActiveObject();
+    const multi = active && active.type === 'activeSelection';
+    if (multi) c.discardActiveObject();
+    // Walk so the selection keeps its own stacking order.
+    (toFront ? objs : objs.slice().reverse()).forEach((o) => (toFront ? c.bringToFront(o) : c.sendToBack(o)));
+    if (multi) c.setActiveObject(new fabric.ActiveSelection(objs, { canvas: c }));
+    c.requestRenderAll();
+    snapshot();
+  }
+
+  function editText(o) {
+    const c = state.canvas;
+    c.setActiveObject(o);
+    o.enterEditing();
+    o.selectionStart = o.selectionEnd = o.text.length;
+    c.requestRenderAll();
+  }
+
+  // Topmost annotation under the pointer, whatever tool is active.
+  function objectAt(e) {
+    const c = state.canvas;
+    const p = c.getPointer(e);
+    const active = c.getActiveObject();
+    if (active && active.type === 'activeSelection' && active.containsPoint(p)) return active;
+    const objs = c.getObjects();
+    for (let i = objs.length - 1; i >= 0; i--) {
+      if (!objs[i].excludeFromExport && objs[i].containsPoint(p)) return objs[i];
+    }
+    return null;
+  }
+
+  function menuItemsFor(target) {
+    const c = state.canvas;
+    const items = [];
+    if (target) {
+      const objs = target.type === 'activeSelection' ? target.getObjects() : [target];
+      if (objs.length === 1 && (target.type === 'i-text' || target.type === 'commentBubble')) {
+        items.push({ label: 'Edit text', icon: 'edit', run: () => editText(target) });
+      }
+      items.push(
+        { label: 'Duplicate', icon: 'duplicate', run: () => duplicateObjects(objs) },
+        { label: 'Bring to front', icon: 'front', run: () => restack(objs, true) },
+        { label: 'Send to back', icon: 'back', run: () => restack(objs, false) },
+        { label: 'Delete', icon: 'trash', hint: '⌫', danger: true, run: () => removeObjects(objs) },
+        'sep'
+      );
+    }
+    items.push(
+      { label: 'Undo', icon: 'undo', hint: keyHint('⌘Z', 'Ctrl+Z'), disabled: state.history.length <= 1, run: undo },
+      { label: 'Redo', icon: 'redo', hint: keyHint('⇧⌘Z', 'Ctrl+Shift+Z'), disabled: state.redoStack.length === 0, run: redo },
+      'sep',
+      { label: 'Copy image', icon: 'copy', hint: keyHint('⌘⏎', 'Ctrl+Enter'), run: done },
+      { label: 'Download PNG…', icon: 'download', run: download }
+    );
+    if (state.zoom !== 1) {
+      items.push({ label: 'Fit to window', icon: 'fit', hint: keyHint('⌘0', 'Ctrl+0'), run: resetZoom });
+    }
+    if (!target && c.getObjects().some((o) => !o.excludeFromExport)) {
+      items.push('sep', { label: 'Clear annotations', icon: 'clear', danger: true, run: clearAll });
+    }
+    return items;
+  }
+
+  function attachContextMenu() {
+    const menu = document.getElementById('context-menu');
+    const wrap = document.getElementById('canvas-wrap');
+    const enabledItems = () => Array.from(menu.querySelectorAll('.menu-item:not(:disabled)'));
+    const close = () => { menu.hidden = true; };
+
+    const open = (items, x, y) => {
+      menu.innerHTML = '';
+      items.forEach((it) => {
+        if (it === 'sep') {
+          const sep = document.createElement('div');
+          sep.className = 'menu-sep';
+          sep.setAttribute('role', 'separator');
+          menu.appendChild(sep);
+          return;
+        }
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'menu-item' + (it.danger ? ' danger' : '');
+        b.setAttribute('role', 'menuitem');
+        b.disabled = !!it.disabled;
+        b.innerHTML = MENU_ICONS[it.icon] + '<span class="menu-label"></span><span class="menu-hint"></span>';
+        b.querySelector('.menu-label').textContent = it.label;
+        b.querySelector('.menu-hint').textContent = it.hint || '';
+        b.addEventListener('click', () => { close(); it.run(); });
+        menu.appendChild(b);
+      });
+      menu.hidden = false;
+      const r = menu.getBoundingClientRect();
+      menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + 'px';
+      menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + 'px';
+      const first = enabledItems()[0];
+      if (first) first.focus({ preventScroll: true });
+    };
+
+    document.addEventListener('contextmenu', (e) => {
+      const active = state.canvas.getActiveObject();
+      if (active && active.isEditing) return; // keep the native text menu
+      e.preventDefault();
+      if (!state.imgW || !wrap.contains(e.target)) { close(); return; }
+      const target = objectAt(e);
+      // Select what was right-clicked, so it's clear what the menu acts on.
+      if (target && target !== active && state.tool === 'select') {
+        state.canvas.setActiveObject(target);
+        state.canvas.requestRenderAll();
+      }
+      open(menuItemsFor(target), e.clientX, e.clientY);
+    });
+
+    document.addEventListener('pointerdown', (e) => {
+      if (!menu.hidden && !menu.contains(e.target)) close();
+    }, true);
+    // Capture phase, so Escape closes the menu instead of the editor.
+    document.addEventListener('keydown', (e) => {
+      if (menu.hidden) return;
+      const list = enabledItems();
+      const i = list.indexOf(document.activeElement);
+      if (e.key === 'Escape') close();
+      else if (e.key === 'ArrowDown') list[(i + 1) % list.length].focus();
+      else if (e.key === 'ArrowUp') list[(i - 1 + list.length) % list.length].focus();
+      else if (e.key === 'Enter' || e.key === ' ') { if (i >= 0) list[i].click(); }
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
+    window.addEventListener('blur', close);
+    window.addEventListener('resize', close);
+    wrap.addEventListener('scroll', close);
   }
 
   if (document.readyState === 'loading') {

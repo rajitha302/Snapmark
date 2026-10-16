@@ -515,6 +515,29 @@ function winProbeRequest() {
   });
 }
 
+// "Download PNG…" from the editor's context menu. Webviews can't download
+// files themselves, so the host shows the save dialog and writes the file.
+async function saveImage(dataUrl) {
+  const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+  if (!base64) {
+    vscode.window.showErrorMessage('Snapmark: empty image from editor');
+    return;
+  }
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  const uri = await vscode.window.showSaveDialog({
+    defaultUri: vscode.Uri.file(path.join(os.homedir(), 'Downloads', `snapmark-${stamp}.png`)),
+    filters: { 'PNG image': ['png'] },
+    saveLabel: 'Save',
+  });
+  if (!uri) return;
+  await vscode.workspace.fs.writeFile(uri, Buffer.from(base64, 'base64'));
+  const choice = await vscode.window.showInformationMessage(
+    `Snapmark: saved ${path.basename(uri.fsPath)}`,
+    'Reveal'
+  );
+  if (choice === 'Reveal') vscode.commands.executeCommand('revealFileInOS', uri);
+}
+
 // -----------------------------------------------------------------------------
 // Command
 // -----------------------------------------------------------------------------
@@ -602,6 +625,8 @@ async function annotateCommand(context) {
         } catch {}
         flashCopied();
         panel.dispose();
+      } else if (msg.type === 'download') {
+        await saveImage(String(msg.dataUrl || ''));
       } else if (msg.type === 'cancel') {
         panel.dispose();
       }

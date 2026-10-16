@@ -413,6 +413,75 @@ body.empty #empty-state .empty-inner { pointer-events: auto; }
   font-weight: 500;
 }
 
+/* ---------------------------------------------------------------------------
+   Context menu
+   ------------------------------------------------------------------------- */
+
+#context-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 220px;
+  padding: 5px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  /* Darker than the bars: menu text has to stay readable over anything. */
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02)),
+    rgba(40, 41, 46, 0.82);
+  animation: menu-in 0.12s ease-out;
+  transform-origin: top left;
+}
+#context-menu[hidden] { display: none; }
+@keyframes menu-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+button.menu-item {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  justify-content: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+button.menu-item svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  filter: none;
+  opacity: 0.85;
+}
+button.menu-item:active { transform: none; }
+.menu-label { flex: 1; text-align: left; }
+.menu-hint {
+  margin-left: 20px;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+button.menu-item:hover,
+button.menu-item:focus-visible {
+  background: var(--focus);
+  color: #fff;
+  outline: none;
+}
+button.menu-item:hover .menu-hint,
+button.menu-item:focus-visible .menu-hint { color: rgba(255, 255, 255, 0.8); }
+button.menu-item.danger { color: #ff6961; }
+button.menu-item.danger:hover,
+button.menu-item.danger:focus-visible { background: #ff3b30; color: #fff; }
+.menu-sep {
+  height: 1px;
+  margin: 5px 8px;
+  background: rgba(255, 255, 255, 0.14);
+}
+@media (prefers-reduced-transparency: reduce) {
+  #context-menu { background: var(--glass-solid); }
+}
+
 /* Narrow panels: tighter buttons so the tools fit on one row, and no
    dividers, which would dangle at the end of a wrapped row. */
 @media (max-width: 520px) {
@@ -427,6 +496,7 @@ body.empty #empty-state .empty-inner { pointer-events: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  #context-menu { animation: none; }
   button { transition: none; }
   button:active, button.swatch:hover { transform: none; }
 }

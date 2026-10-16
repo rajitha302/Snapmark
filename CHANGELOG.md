@@ -16,6 +16,9 @@
 - The toolbar can be moved: drag its grip (or focus it and use the arrow keys) to dock it on the left, right, top or bottom edge. The position is remembered.
 - The tool you pick stays selected until you close the editor. Text and Comment no longer switch back to Select after each use. With those tools, clicking away finishes what you're typing, clicking an existing text or comment edits or moves it, and Delete removes the selected one.
 - Blue is now the default colour.
+- Right-click menu, styled to match the editor. On an annotation: Edit text, Duplicate, Bring to front, Send to back, Delete. Anywhere: Undo, Redo, Copy image, Download PNG (full resolution, saved where you choose), Fit to window, Clear annotations. While you're typing, the normal text menu still appears.
+- Delete button in the bottom toolbar, active while something is selected.
+- Fixed shapes drawn by dragging (rectangle, ellipse, highlight) being clickable only near the corner where you started drawing.
 - Picking a size resizes whatever is selected: line width for strokes and shapes, properly sized arrowheads for arrows, text size for text and comments, and the whole marker for step markers. Text now follows the size setting too (Medium is unchanged).
 - Picking a colour recolours whatever is selected: pen strokes, arrows, shapes, highlights, text, comments and step markers, including several at once. Redactions stay black. Step markers and comments switch to dark text on light colours so they stay readable.
 - New Upload button next to Copy for opening a different image partway through. It replaces the current image and its annotations.
