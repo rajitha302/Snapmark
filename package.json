@@ -1,6 +1,6 @@
 {
   "name": "snapmark",
-  "displayName": "Snapmark",
+  "displayName": "SnapMark - Image Editor",
   "description": "Annotate screenshots on your clipboard before pasting them into AI chats like Claude, Copilot, and Cursor. Redact sensitive parts, add numbered steps, and resize large images automatically.",
   "version": "1.0.1",
   "publisher": "RajithaDisanayaka",
