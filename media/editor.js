@@ -2115,7 +2115,7 @@
     cat: {
       fur: '#eba25b', hi: '#f9c88c', shade: '#c47334', dark: '#b8652b', far: '#c47235',
       light: '#fbe8ca', lightShade: '#e6c99c', nose: '#f08a9b', ear: '#f4a9b4', eye: '#24170d',
-      whisker: '#fff4e4', line: '#5a3216',
+      mouth: '#8a5236', whisker: '#fff4e4', line: '#5a3216',
     },
     dog: {
       fur: '#c99460', hi: '#e6bb8a', shade: '#9c6a3a', dark: '#6f4424', far: '#a06c3c',
@@ -2254,6 +2254,40 @@
       line(pts, 0.55, C.collar);
       dot(tx * F, ty * F, C.tag); dot(tx * F + 1, ty * F, C.tag); dot(tx * F, ty * F + 1, C.tag); dot(tx * F + 1, ty * F + 1, '#b8902f');
     };
+    // The cat looks at you: a round face centred on design (cx, cy) with two
+    // big eyes, a pink nose and a "ω" mouth, whiskers both sides, pink inner
+    // ears and tabby forehead marks. Details are mirrored about the centre.
+    const catFace = (cx, cy) => {
+      ell(cx, cy + 0.3, 4.6, 3.8, C.fur);
+      ell(cx, cy + 1.4, 5, 2.4, C.fur); // cheek fluff
+      tri([cx - 4.1, cy - 1], [cx - 3.3, cy - 5.6], [cx - 0.6, cy - 2.6], C.fur);
+      tri([cx + 0.6, cy - 2.6], [cx + 3.3, cy - 5.6], [cx + 4.1, cy - 1], C.fur);
+      ell(cx, cy + 1.7, 2.4, 1.4, C.light); // muzzle
+      const X = Math.round(cx * F), Y = Math.round(cy * F);
+      const both = (x, y, c) => { dot(x, y, c); dot(2 * X - 1 - x, y, c); };
+      [[X - 6, Y - 8], [X - 6, Y - 7], [X - 5, Y - 7]].forEach(([x, y]) => both(x, y, C.ear));
+      [[X - 3, Y - 6], [X - 3, Y - 5], [X - 1, Y - 7], [X - 1, Y - 6]].forEach(([x, y]) => both(x, y, C.dark));
+      if (p.eyes === 'shut') {
+        [[X - 6, Y], [X - 5, Y + 1], [X - 4, Y + 1], [X - 3, Y]].forEach(([x, y]) => both(x, y, C.eye));
+      } else {
+        [[X - 5, Y - 2], [X - 4, Y - 2], [X - 6, Y - 1], [X - 5, Y - 1], [X - 4, Y - 1], [X - 3, Y - 1],
+          [X - 6, Y], [X - 5, Y], [X - 4, Y], [X - 3, Y], [X - 5, Y + 1], [X - 4, Y + 1]].forEach(([x, y]) => both(x, y, C.eye));
+        both(X - 4, Y - 1, '#ffffff');
+      }
+      both(X - 8, Y + 2, C.ear); both(X - 7, Y + 2, C.ear); // blush
+      both(X - 1, Y + 2, C.nose);
+      if (p.mouth === 'open') {
+        for (let y = Y + 3; y <= Y + 5; y++) { both(X - 2, y, C.eye); both(X - 1, y, C.eye); }
+        both(X - 1, Y + 5, C.nose);
+      } else {
+        [[X - 1, Y + 3], [X - 2, Y + 4], [X - 3, Y + 3]].forEach(([x, y]) => both(x, y, C.mouth));
+      }
+      if (p.paw) line([[14, 19], [15, 15.5], [cx - 0.4, cy + 2.4]], 1.1, C.light);
+      after.push(() => {
+        hline(X - 9, Y + 2, X - 14, Y + 1, C.whisker); hline(X - 9, Y + 4, X - 14, Y + 5, C.whisker);
+        hline(X + 8, Y + 2, X + 13, Y + 1, C.whisker); hline(X + 8, Y + 4, X + 13, Y + 5, C.whisker);
+      });
+    };
     let heartAt = [9, 0];
 
     if (p.pose === 'lie') {
@@ -2263,21 +2297,15 @@
       if (cat) [[8, 16], [10, 16], [12, 16]].forEach(([x, y]) => stripe(x, y));
       else ell(9, 18, 2, 1.3, C.dark);
       ell(19.5, 21.5, 2.6, 1.1, C.light);
-      ell(18.5, 17.5, 3.8, 3.3, C.fur);
       if (cat) {
-        tri([15.5, 15], [16.5, 11.5], [18, 14.5], C.fur);
-        tri([19, 14.3], [20.8, 11.3], [21.6, 15.3], C.fur);
-        set(16, 13, C.ear); set(20, 13, C.ear);
-        ell(20.8, 18.6, 1.6, 1.2, C.light);
-        set(22, 18, C.nose);
-        blush(19, 18);
-        whiskers(22, 18);
+        catFace(18.5, 17.2);
       } else {
+        ell(18.5, 17.5, 3.8, 3.3, C.fur);
         ell(22, 18.6, 2, 1.5, C.light);
         set(23, 18, C.nose);
         ell(16, 18, 1.4, 2.6, C.ear);
+        eyes(20, 17);
       }
-      eyes(20, 17);
       heartAt = [12, 8];
     } else if (p.pose === 'stand') {
       // Walk cycle: 0 and 2 are contact frames (legs apart), 1 and 3 passing
@@ -2324,23 +2352,13 @@
       ell(9, 19, 5, 3.6, C.fur);
       ell(11.5, 16, 4.3, 5.2, C.fur);
       ell(14, 17, 2, 3.8, C.light);
-      if (p.paw) line([[14, 19], [16, 15], [18.5, 13]], 1.2, C.light);
-      else rect(13, 18, 15, 22, C.light);
+      if (!p.paw) rect(13, 18, 15, 22, C.light);
+      else if (!cat) line([[14, 19], [16, 15], [18.5, 13]], 1.2, C.light);
       const hy = 9.5 + (p.headDown ? 1 : 0);
       const r = Math.round(hy);
       if (cat) {
         [[7, 17], [8, 15], [10, 12]].forEach(([x, y]) => stripe(x, y));
-        ell(16, hy, 4.3, 3.8, C.fur);
-        tri([12.6, hy - 2], [13.4, hy - 6.3], [15.6, hy - 3], C.fur);
-        tri([16.6, hy - 3], [18.8, hy - 6.3], [19.6, hy - 1.6], C.fur);
-        set(14, r - 4, C.ear); set(18, r - 4, C.ear);
-        ell(18.6, hy + 1.6, 1.7, 1.3, C.light);
-        set(20, r, C.nose);
-        eyes(17, r);
-        blush(16, r + 1);
-        whiskers(20, r);
-        if (p.mouth === 'open') { rect(18, r + 1, 20, r + 2, C.eye); set(19, r + 2, C.nose); }
-        if (p.paw) set(20, r + 1, C.nose);
+        catFace(15.5, hy);
       } else {
         ell(9, 17, 1.8, 1.5, C.dark);
         ell(15.5, hy - 0.5, 4, 3.9, C.fur);
