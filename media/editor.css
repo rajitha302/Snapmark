@@ -1,11 +1,12 @@
-/* Liquid-glass chrome floating over a near-black stage. The bars stay readable
-   over bright screenshots because the glass carries a mid-grey tint rather
-   than being fully clear. */
+/* Liquid-glass chrome floating over a near-black stage with a faint golden
+   glow. The bars stay readable over bright screenshots because the glass
+   carries a mid-grey tint rather than being fully clear. Gold is the brand
+   accent (from snapmarkapp.netlify.app). */
 :root {
   --ink: #f5f5f7;
   --ink-dim: rgba(245, 245, 247, 0.62);
-  --stage: #0a0a0a;
-  --stage-check: #141414;
+  --stage: #0a0a0f;
+  --stage-check: #13131a;
   --glass-tint: rgba(72, 74, 80, 0.58);
   --glass-sheen-top: rgba(255, 255, 255, 0.16);
   --glass-sheen-bottom: rgba(255, 255, 255, 0.03);
@@ -14,10 +15,14 @@
   --lens-top: rgba(255, 255, 255, 0.34);
   --lens-bottom: rgba(255, 255, 255, 0.14);
   --hover: rgba(255, 255, 255, 0.12);
-  --blue-top: #3d9bff;
-  --blue-bottom: #0a7aff;
-  --blue-glow: rgba(10, 122, 255, 0.45);
-  --focus: #0a84ff;
+  --gold: #e6c36a;
+  --gold-light: #ecdcb2;
+  --gold-ink: #1a1405; /* text on gold */
+  --gold-gradient: linear-gradient(#fff1c2, #f3dc98 18%, #e6c36a 38%, #c99a38 62%, #9a6e1c 92%);
+  --gold-sheen: linear-gradient(rgba(255, 251, 230, 0.55), rgba(255, 251, 230, 0) 42%);
+  --gold-glow: rgba(201, 150, 50, 0.55);
+  --gold-tint: rgba(236, 220, 178, 0.16);
+  --focus: #e6c36a;
 }
 
 * { box-sizing: border-box; }
@@ -32,13 +37,18 @@ html, body {
   font-size: 13px;
   -webkit-font-smoothing: antialiased;
   background-color: var(--stage);
+  /* The glow sits over the checkerboard, lowest at the bottom right like the
+     site's hero, with a fainter wash from the top. */
   background-image:
+    radial-gradient(70% 65% at 85% 95%, rgba(212, 175, 55, 0.3), transparent 70%),
+    radial-gradient(ellipse at top, rgba(236, 220, 178, 0.08), transparent 60%),
     linear-gradient(45deg, var(--stage-check) 25%, transparent 25%),
     linear-gradient(-45deg, var(--stage-check) 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, var(--stage-check) 75%),
     linear-gradient(-45deg, transparent 75%, var(--stage-check) 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  background-size: 100% 100%, 100% 100%, 20px 20px, 20px 20px, 20px 20px, 20px 20px;
+  background-position: 0 0, 0 0, 0 0, 0 10px, 10px -10px, -10px 0;
+  background-repeat: no-repeat, no-repeat, repeat, repeat, repeat, repeat;
 }
 
 /* ---------------------------------------------------------------------------
@@ -140,9 +150,9 @@ body[data-dock="bottom"] #tools { left: 50%; transform: translateX(-50%); max-wi
   z-index: 9;
   pointer-events: none;
   border-radius: 26px;
-  border: 2px solid rgba(10, 132, 255, 0.85);
-  background: rgba(10, 132, 255, 0.16);
-  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.12), 0 0 28px rgba(10, 132, 255, 0.4);
+  border: 2px solid rgba(230, 195, 106, 0.9);
+  background: rgba(236, 220, 178, 0.14);
+  box-shadow: 0 0 0 4px rgba(230, 195, 106, 0.12), 0 0 28px rgba(212, 175, 55, 0.4);
   opacity: 0;
   transition: left 0.16s ease, top 0.16s ease, width 0.16s ease, height 0.16s ease, opacity 0.12s ease;
 }
@@ -378,20 +388,27 @@ body.loaded #commit svg.chev { display: block; }
     var(--glass-tint);
 }
 
+/* The brand's gold button: metallic gradient, top sheen, warm glow. */
 button.action.primary {
   gap: 8px;
-  color: #fff;
+  color: var(--gold-ink);
   font-weight: 600;
-  background: linear-gradient(180deg, var(--blue-top), var(--blue-bottom));
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: var(--gold-sheen), var(--gold-gradient);
+  border: 0;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.45),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.15),
-    0 6px 22px var(--blue-glow);
+    inset 0 1px 0 rgba(255, 250, 220, 0.95),
+    inset 0 -1px 0 rgba(60, 35, 5, 0.55),
+    inset 0 0 0 1px rgba(255, 240, 190, 0.18),
+    0 1px 0 rgba(0, 0, 0, 0.45),
+    0 8px 20px -6px var(--gold-glow),
+    0 16px 40px -14px rgba(0, 0, 0, 0.7);
 }
+button.action.primary svg { filter: none; }
 button.action.primary:hover {
-  background: linear-gradient(180deg, #57a9ff, #1a84ff);
+  background: var(--gold-sheen), var(--gold-gradient);
+  filter: brightness(1.06) saturate(1.05);
 }
+button.action.primary:active { filter: brightness(0.94); }
 
 /* Until an image is loaded, only Close works. */
 body.empty .bar button,
@@ -438,7 +455,7 @@ body.loaded #empty-state { display: none; }
 }
 #canvas-wrap.dragging .empty-inner {
   border-color: var(--focus);
-  background: rgba(10, 132, 255, 0.16);
+  background: var(--gold-tint);
 }
 .empty-title {
   font-size: 17px;
@@ -512,7 +529,7 @@ button.menu-item:active { transform: none; }
 }
 button.menu-item:hover,
 button.menu-item:focus-visible {
-  background: var(--focus);
+  background: rgba(236, 220, 178, 0.18);
   color: #fff;
   outline: none;
 }
@@ -522,9 +539,7 @@ button.menu-item.danger { color: #ff6961; }
 button.menu-item.danger:hover,
 button.menu-item.danger:focus-visible { background: #ff3b30; color: #fff; }
 button.menu-item[aria-checked="true"] { font-weight: 600; }
-button.menu-item[aria-checked="true"] svg { color: var(--focus); opacity: 1; }
-button.menu-item[aria-checked="true"]:hover svg,
-button.menu-item[aria-checked="true"]:focus-visible svg { color: #fff; }
+button.menu-item[aria-checked="true"] svg { color: var(--gold); opacity: 1; }
 .menu-sep {
   height: 1px;
   margin: 5px 8px;
@@ -594,9 +609,9 @@ button.menu-item[aria-checked="true"]:focus-visible svg { color: #fff; }
 .drop-zone > * { pointer-events: none; } /* so dragover's target is the zone */
 .drop-zone.over {
   transform: scale(1.04);
-  border-color: rgba(10, 132, 255, 0.9);
-  background: rgba(10, 132, 255, 0.28);
-  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.18), 0 0 32px rgba(10, 132, 255, 0.4);
+  border-color: rgba(230, 195, 106, 0.9);
+  background: rgba(236, 220, 178, 0.2);
+  box-shadow: 0 0 0 4px rgba(230, 195, 106, 0.16), 0 0 32px rgba(212, 175, 55, 0.4);
 }
 .drop-title { font-size: 15px; font-weight: 600; }
 .drop-sub { font-size: 12px; color: var(--ink-dim); }
@@ -669,11 +684,11 @@ button.menu-item[aria-checked="true"]:focus-visible svg { color: #fff; }
 #tour-skip { color: var(--ink-dim); }
 /* What the current tip points at. */
 .tour-target {
-  outline: 2px solid rgba(10, 132, 255, 0.9);
+  outline: 2px solid rgba(230, 195, 106, 0.9);
   outline-offset: 3px;
-  box-shadow: 0 0 0 7px rgba(10, 132, 255, 0.18), 0 0 28px rgba(10, 132, 255, 0.35);
+  box-shadow: 0 0 0 7px rgba(230, 195, 106, 0.16), 0 0 28px rgba(212, 175, 55, 0.35);
 }
-#btn-done.tour-target { box-shadow: 0 0 0 7px rgba(10, 132, 255, 0.18), 0 6px 22px var(--blue-glow); }
+#btn-done.tour-target { box-shadow: 0 0 0 7px rgba(230, 195, 106, 0.16), 0 8px 20px -6px var(--gold-glow); }
 
 /* Narrow panels: tighter buttons so the tools fit on one row, and no
    dividers, which would dangle at the end of a wrapped row. */

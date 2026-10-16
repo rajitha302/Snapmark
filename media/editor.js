@@ -229,6 +229,14 @@
     return 1;
   }
 
+  // Selection handles in the brand gold instead of fabric's default blue.
+  fabric.Object.prototype.set({
+    borderColor: '#e6c36a',
+    cornerColor: '#fff1c2',
+    cornerStrokeColor: '#9a6e1c',
+    transparentCorners: false,
+  });
+
   function init() {
     const el = document.getElementById('canvas');
     state.canvas = new fabric.Canvas(el, {
@@ -961,8 +969,8 @@
         }
         state.currentShape = new fabric.Rect({
           left: p.x, top: p.y, width: 0, height: 0,
-          fill: 'rgba(14, 99, 156, 0.12)',
-          stroke: '#0e639c', strokeWidth: 1,
+          fill: 'rgba(236, 220, 178, 0.14)',
+          stroke: '#e6c36a', strokeWidth: 1,
           strokeDashArray: [6, 4], strokeUniform: true,
           selectable: false, evented: false,
           excludeFromExport: true,
