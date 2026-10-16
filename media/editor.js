@@ -2098,131 +2098,227 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Pet (snapmark.pet): a small pixel-art cat or dog that sits by the tool pill
-  // and idles: blinks, swishes or wags its tail, grooms or pants, yawns, looks
-  // around, wanders a little and naps. Poses are drawn from shapes on a 26×24
-  // grid and outlined automatically, so they are parameters rather than
-  // hand-drawn frames. It's DOM, not canvas content, so it never appears in
-  // the copied image.
+  // Pet (snapmark.pet): a small pixel-art cat or dog that lives at the bottom
+  // left, on a floor just above the style bar, with a cushion (cat) or a dog
+  // house (dog). It's mostly a homebody (blinks, tail, grooms or pants,
+  // yawns, naps); now and then it strolls out and back, turns round halfway,
+  // or walks off an edge and later comes back in through the same edge. All
+  // art is drawn from shapes on a design grid (26×24 units for the pet, 2
+  // detail pixels per unit), shaded and outlined automatically, so poses are
+  // parameters rather than hand-drawn frames. It's DOM, not canvas content,
+  // so it never appears in the copied image.
   // ---------------------------------------------------------------------------
 
-  const PET_W = 26, PET_H = 24, PET_SCALE = 2;
+  const PET_F = 2; // detail pixels (CSS px) per design unit
+  const PET_W = 26 * PET_F, PET_H = 24 * PET_F;
   const PET_COLORS = {
-    cat: { fur: '#e9a35a', dark: '#c27432', light: '#f9e2c0', nose: '#f08a9b', line: '#2a1c12' },
-    dog: { fur: '#c8925c', dark: '#7a4a26', light: '#f4e6cc', nose: '#2a1c12', line: '#2a1c12' },
+    cat: {
+      fur: '#eba25b', hi: '#f9c88c', shade: '#c47334', dark: '#b8652b', far: '#c47235',
+      light: '#fbe8ca', lightShade: '#e6c99c', nose: '#f08a9b', ear: '#f4a9b4', eye: '#24170d',
+      whisker: '#fff4e4', line: '#5a3216',
+    },
+    dog: {
+      fur: '#c99460', hi: '#e6bb8a', shade: '#9c6a3a', dark: '#6f4424', far: '#a06c3c',
+      light: '#f6eacf', lightShade: '#dcc6a0', nose: '#24170d', ear: '#6f4424', eye: '#24170d',
+      collar: '#d9433f', tag: '#f2cf73', line: '#3e2614',
+    },
+  };
+  const HOME_COLORS = {
+    cushion: { base: '#5aa6a0', hi: '#8fd0c8', shade: '#3c7c77', tuft: '#2f6662', piping: '#e9cf8a', line: '#1f4645' },
+    house: {
+      wall: '#6f9dc6', wallHi: '#9cc3e4', wallShade: '#4f7ca4', plank: '#5a87b0',
+      roof: '#d0533f', roofHi: '#ec7f66', roofShade: '#a23a2b', trim: '#f4e9d2', door: '#1d140c', line: '#25233a',
+    },
   };
   const PET_TONGUE = '#f07c8c', PET_ZZZ = '#d7dbe4', PET_HEART = '#ff6b8b';
+  const CUSHION_W = 44, CUSHION_H = 16, CUSHION_LIFT = 9; // the cat sits this far up on it
+  const HOUSE_W = 46, HOUSE_H = 42, HOUSE_GAP = 26; // the dog sits this far right of the house's left edge
   const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-  const pet = {
-    kind: 'off', timer: 0, ctx: null, tick: 0,
-    act: 'sit', actUntil: 0, facing: 1, x: null, target: 0, spot: null,
-    blinkAt: -1e9, heartUntil: 0,
-  };
+  function mixHex(a, b, t) {
+    const n = (h, i) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
+    return '#' + [0, 1, 2].map((i) => Math.round(n(a, i) + (n(b, i) - n(a, i)) * t).toString(16).padStart(2, '0')).join('');
+  }
 
-  // p: { pose: 'sit' | 'stand' | 'lie', swing (tail, -1..1), eyes: 'open' |
-  // 'shut', mouth: 'shut' | 'open' | 'tongue', paw (cat grooming), headDown,
-  // leg (walk phase 0/1), z (0-3 sleep z's), heart }
-  function petSprite(kind, p) {
-    const C = PET_COLORS[kind];
-    const cat = kind === 'cat';
-    const grid = new Array(PET_W * PET_H).fill(null);
-    const set = (x, y, c) => {
+  // A w×h grid of detail pixels. Shapes take design units (× PET_F); dot()
+  // and hline() take detail pixels, for fine touches.
+  function pixelGrid(w, h) {
+    const F = PET_F;
+    const g = new Array(w * h).fill(null);
+    const dot = (x, y, c) => {
       x = Math.round(x); y = Math.round(y);
-      if (x >= 0 && y >= 0 && x < PET_W && y < PET_H) grid[y * PET_W + x] = c;
+      if (x >= 0 && y >= 0 && x < w && y < h) g[y * w + x] = c;
     };
     const ell = (cx, cy, rx, ry, c) => {
+      cx *= F; cy *= F; rx *= F; ry *= F;
       for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) {
         for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
           const dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry;
-          if (dx * dx + dy * dy <= 1) set(x, y, c);
+          if (dx * dx + dy * dy <= 1) dot(x, y, c);
         }
       }
     };
-    const rect = (x0, y0, x1, y1, c) => {
-      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) set(x, y, c);
-    };
-    const tri = (a, b, d, c) => {
-      const side = (p0, p1, q) => (p1[0] - p0[0]) * (q[1] - p0[1]) - (p1[1] - p0[1]) * (q[0] - p0[0]);
-      for (let y = Math.floor(Math.min(a[1], b[1], d[1])); y <= Math.ceil(Math.max(a[1], b[1], d[1])); y++) {
-        for (let x = Math.floor(Math.min(a[0], b[0], d[0])); x <= Math.ceil(Math.max(a[0], b[0], d[0])); x++) {
-          const q = [x + 0.5, y + 0.5];
-          const s0 = side(a, b, q), s1 = side(b, d, q), s2 = side(d, a, q);
-          if ((s0 >= 0 && s1 >= 0 && s2 >= 0) || (s0 <= 0 && s1 <= 0 && s2 <= 0)) set(x, y, c);
+    return {
+      g, dot, ell,
+      set(x, y, c) {
+        x = Math.round(x) * F; y = Math.round(y) * F;
+        for (let j = 0; j < F; j++) for (let i = 0; i < F; i++) dot(x + i, y + j, c);
+      },
+      rect(x0, y0, x1, y1, c) { // design units, inclusive
+        for (let y = Math.round(y0 * F); y < Math.round((y1 + 1) * F); y++) {
+          for (let x = Math.round(x0 * F); x < Math.round((x1 + 1) * F); x++) dot(x, y, c);
         }
-      }
+      },
+      tri(a, b, d, c) {
+        const [A, B, D] = [a, b, d].map(([x, y]) => [x * F, y * F]);
+        const side = (p0, p1, q) => (p1[0] - p0[0]) * (q[1] - p0[1]) - (p1[1] - p0[1]) * (q[0] - p0[0]);
+        for (let y = Math.floor(Math.min(A[1], B[1], D[1])); y <= Math.ceil(Math.max(A[1], B[1], D[1])); y++) {
+          for (let x = Math.floor(Math.min(A[0], B[0], D[0])); x <= Math.ceil(Math.max(A[0], B[0], D[0])); x++) {
+            const q = [x + 0.5, y + 0.5];
+            const s0 = side(A, B, q), s1 = side(B, D, q), s2 = side(D, A, q);
+            if ((s0 >= 0 && s1 >= 0 && s2 >= 0) || (s0 <= 0 && s1 <= 0 && s2 <= 0)) dot(x, y, c);
+          }
+        }
+      },
+      line(pts, r, c) { // a thick stroke through design-unit points
+        for (let i = 1; i < pts.length; i++) {
+          const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+          const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) * F * 2));
+          for (let k = 0; k <= n; k++) ell(x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n, r, r, c);
+        }
+      },
+      hline(x0, y0, x1, y1, c) { // a 1px line in detail pixels
+        const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+        for (let k = 0; k <= n; k++) dot(x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n, c);
+      },
+      // Light from above: a two-pixel lit band along top edges and a
+      // two-pixel shadow along undersides. tones: { colour: [lit, shadow] }.
+      shade(tones) {
+        const src = g.slice();
+        const filled = (x, y) => x >= 0 && y >= 0 && x < w && y < h && src[y * w + x];
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const c = src[y * w + x], t = c && tones[c];
+            if (!t) continue;
+            const top = !filled(x, y - 1) ? 1 : !filled(x, y - 2) ? 2 : 0;
+            const bot = !filled(x, y + 1) ? 1 : !filled(x, y + 2) ? 2 : 0;
+            if (t[0] && top) g[y * w + x] = top === 1 ? t[0] : mixHex(c, t[0], 0.5);
+            else if (bot) g[y * w + x] = bot === 1 ? t[1] : mixHex(c, t[1], 0.45);
+          }
+        }
+      },
+      outline(c) { // every empty pixel touching the shape
+        const src = g.slice();
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            if (src[y * w + x]) continue;
+            if ((x > 0 && src[y * w + x - 1]) || (x < w - 1 && src[y * w + x + 1]) ||
+                (y > 0 && src[(y - 1) * w + x]) || (y < h - 1 && src[(y + 1) * w + x])) g[y * w + x] = c;
+          }
+        }
+      },
+      pattern(x, y, rows, c) { // chunky design-unit pixels, e.g. z's and the heart
+        rows.forEach((row, j) => { for (let i = 0; i < row.length; i++) if (row[i] === '#') this.set(x + i, y + j, c); });
+      },
     };
-    const line = (pts, r, c) => {
-      for (let i = 1; i < pts.length; i++) {
-        const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
-        const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 2));
-        for (let k = 0; k <= n; k++) ell(x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n, r, r, c);
-      }
-    };
-    const pattern = (x, y, rows, c, target) => rows.forEach((row, j) => {
-      for (let i = 0; i < row.length; i++) {
-        if (row[i] !== '#') continue;
-        const gx = x + i, gy = y + j;
-        if (gx >= 0 && gy >= 0 && gx < PET_W && gy < PET_H) target[gy * PET_W + gx] = c;
-      }
-    });
-    const eyes = (x, y) => {
-      if (p.eyes === 'shut') { set(x - 1, y, C.line); set(x, y, C.line); }
-      else { set(x, y - 1, C.line); set(x, y, C.line); }
-    };
+  }
+
+  // p: { pose: 'sit' | 'stand' | 'lie', swing (tail, -1..1), eyes: 'open' |
+  // 'shut', mouth: 'shut' | 'open' | 'tongue', paw (cat grooming), headDown,
+  // leg (walk frame 0-3), z (0-3 sleep z's), heart }. Faces right.
+  function petSprite(kind, p) {
+    const C = PET_COLORS[kind];
+    const cat = kind === 'cat';
+    const F = PET_F;
+    const G = pixelGrid(PET_W, PET_H);
+    const { set, ell, rect, tri, line, dot, hline } = G;
     const sw = p.swing || 0;
+    const after = []; // details drawn over the outline
+    // Eye whose lower-right design unit is (x, y): round, with a catch-light;
+    // shut, a sleepy curve.
+    const eyes = (x, y) => {
+      const ex = (x - 1) * F, ey = (y - 1) * F;
+      if (p.eyes === 'shut') { [[0, 2], [1, 3], [2, 3], [3, 2]].forEach(([i, j]) => dot(ex + i, ey + j, C.eye)); return; }
+      for (let j = 0; j < 4; j++) {
+        for (let i = 0; i < 4; i++) if (!((i === 0 || i === 3) && (j === 0 || j === 3))) dot(ex + i, ey + j, C.eye);
+      }
+      dot(ex + 2, ey + 1, '#ffffff');
+    };
+    const stripe = (x, y) => { dot(x * F + 1, y * F, C.dark); dot(x * F, y * F + 1, C.dark); dot(x * F, y * F + 2, C.dark); };
+    const blush = (x, y) => { dot(x * F, y * F + 1, C.ear); dot(x * F + 1, y * F + 1, C.ear); };
+    const whiskers = (x, y) => after.push(() => {
+      hline(x * F + 3, y * F + 2, x * F + 6, y * F + 1, C.whisker);
+      hline(x * F + 3, y * F + 4, x * F + 6, y * F + 5, C.whisker);
+    });
+    const collar = (pts, tx, ty) => {
+      line(pts, 0.55, C.collar);
+      dot(tx * F, ty * F, C.tag); dot(tx * F + 1, ty * F, C.tag); dot(tx * F, ty * F + 1, C.tag); dot(tx * F + 1, ty * F + 1, '#b8902f');
+    };
     let heartAt = [9, 0];
 
     if (p.pose === 'lie') {
       if (cat) line([[5, 20], [2, 21], [4, 22], [9, 22]], 1.1, C.fur);
       else line([[5, 19], [2, 17 + sw]], 1.2, C.fur);
       ell(11, 19, 7.5, 3.3, C.fur);
-      if (cat) [[8, 16], [10, 16], [12, 16]].forEach(([x, y]) => set(x, y, C.dark));
+      if (cat) [[8, 16], [10, 16], [12, 16]].forEach(([x, y]) => stripe(x, y));
       else ell(9, 18, 2, 1.3, C.dark);
       ell(19.5, 21.5, 2.6, 1.1, C.light);
       ell(18.5, 17.5, 3.8, 3.3, C.fur);
       if (cat) {
         tri([15.5, 15], [16.5, 11.5], [18, 14.5], C.fur);
         tri([19, 14.3], [20.8, 11.3], [21.6, 15.3], C.fur);
+        set(16, 13, C.ear); set(20, 13, C.ear);
         ell(20.8, 18.6, 1.6, 1.2, C.light);
         set(22, 18, C.nose);
+        blush(19, 18);
+        whiskers(22, 18);
       } else {
         ell(22, 18.6, 2, 1.5, C.light);
         set(23, 18, C.nose);
-        ell(16, 18, 1.4, 2.6, C.dark);
+        ell(16, 18, 1.4, 2.6, C.ear);
       }
-      set(19, 17, C.line); set(20, 17, C.line);
+      eyes(20, 17);
       heartAt = [12, 8];
     } else if (p.pose === 'stand') {
-      [[5, C.dark], [8, C.fur], [15, C.dark], [18, C.fur]].forEach(([x, c], i) => {
-        const o = p.leg ? 1 : -1;
-        const lx = x + (i % 2 ? o : -o);
-        rect(lx, 18, lx + 1, 22, c);
+      // Walk cycle: 0 and 2 are contact frames (legs apart), 1 and 3 passing
+      // frames (legs together, body up a unit, the swinging pair lifted).
+      const f = p.leg || 0;
+      const by = f % 2 ? -1 : 0;
+      const spread = [1, 0, -1, 0][f];
+      [[5, C.far], [8, C.fur], [15, C.far], [18, C.fur]].forEach(([x, c], i) => {
+        const lx = x + (i % 2 ? spread : -spread);
+        const lift = (f === 1 && i % 2) || (f === 3 && !(i % 2)) ? 1 : 0;
+        rect(lx, 18 + by, lx + 1, 22 - lift, c);
+        if (cat) rect(lx, 22 - lift, lx + 1, 22 - lift, C.light);
       });
-      if (cat) line([[5, 15], [2, 12 + sw], [2.5, 8 + sw * 1.5]], 1.1, C.fur);
-      else line([[5, 15], [2.5 + sw * 1.5, 11]], 1.2, C.fur);
-      ell(11.5, 16, 7, 3.4, C.fur);
-      ell(12, 18.4, 4.5, 1.2, C.light);
+      if (cat) line([[5, 15 + by], [2, 12 + sw + by], [2.5, 8 + sw * 1.5 + by]], 1.1, C.fur);
+      else line([[5, 15 + by], [2.5 + sw * 1.5, 11 + by]], 1.2, C.fur);
+      ell(11.5, 16 + by, 7, 3.4, C.fur);
+      ell(12, 18.4 + by, 4.5, 1.2, C.light);
       if (cat) {
-        [[9, 13], [11, 13], [13, 13]].forEach(([x, y]) => set(x, y, C.dark));
-        ell(19, 11, 4, 3.6, C.fur);
-        tri([15.8, 9], [16.6, 4.8], [18.6, 8], C.fur);
-        tri([19.6, 8], [21.6, 4.8], [22.4, 9.4], C.fur);
-        ell(21.4, 12.4, 1.6, 1.2, C.light);
-        set(23, 11, C.nose);
-        eyes(20, 11);
+        [[9, 13], [11, 13], [13, 13]].forEach(([x, y]) => stripe(x, y + by));
+        ell(19, 11 + by, 4, 3.6, C.fur);
+        tri([15.8, 9 + by], [16.6, 4.8 + by], [18.6, 8 + by], C.fur);
+        tri([19.6, 8 + by], [21.6, 4.8 + by], [22.4, 9.4 + by], C.fur);
+        set(17, 7 + by, C.ear); set(21, 7 + by, C.ear);
+        ell(21.4, 12.4 + by, 1.6, 1.2, C.light);
+        set(23, 11 + by, C.nose);
+        eyes(20, 11 + by);
+        blush(19, 12 + by);
+        whiskers(23, 11 + by);
       } else {
-        ell(10, 14.5, 2, 1.3, C.dark);
-        ell(18.5, 11, 3.8, 3.5, C.fur);
-        ell(22.2, 12.4, 2, 1.6, C.light);
-        set(23, 11, C.nose); set(24, 11, C.nose);
-        ell(16.5, 12, 1.4, 2.8, C.dark);
-        eyes(19, 11);
-        if (p.mouth === 'tongue') { set(21, 14, C.line); rect(22, 14, 22, 15, PET_TONGUE); }
+        ell(10, 14.5 + by, 2, 1.3, C.dark);
+        ell(18.5, 11 + by, 3.8, 3.5, C.fur);
+        ell(22.2, 12.4 + by, 2, 1.6, C.light);
+        set(23, 11 + by, C.nose); set(24, 11 + by, C.nose);
+        ell(16.5, 12 + by, 1.4, 2.8, C.ear);
+        eyes(19, 11 + by);
+        collar([[15.3, 12.2 + by], [16.4, 14.6 + by]], 16.6, 15 + by);
+        if (p.mouth === 'tongue') { set(21, 14 + by, C.eye); rect(22, 14 + by, 22, 15 + by, PET_TONGUE); }
       }
       heartAt = [10, 1];
     } else {
-      // Sitting, facing right.
+      // Sitting.
       if (cat) line([[6, 21], [2.5, 21], [1.5 + sw * 0.8, 17], [2.5 + sw * 1.5, 13.5]], 1.1, C.fur);
       else line([[6, 18], [3 + sw * 1.8, 13.5]], 1.2, C.fur);
       ell(9, 19, 5, 3.6, C.fur);
@@ -2233,56 +2329,117 @@
       const hy = 9.5 + (p.headDown ? 1 : 0);
       const r = Math.round(hy);
       if (cat) {
-        [[7, 17], [8, 15], [10, 12]].forEach(([x, y]) => set(x, y, C.dark));
+        [[7, 17], [8, 15], [10, 12]].forEach(([x, y]) => stripe(x, y));
         ell(16, hy, 4.3, 3.8, C.fur);
         tri([12.6, hy - 2], [13.4, hy - 6.3], [15.6, hy - 3], C.fur);
         tri([16.6, hy - 3], [18.8, hy - 6.3], [19.6, hy - 1.6], C.fur);
+        set(14, r - 4, C.ear); set(18, r - 4, C.ear);
         ell(18.6, hy + 1.6, 1.7, 1.3, C.light);
         set(20, r, C.nose);
         eyes(17, r);
-        if (p.mouth === 'open') { rect(18, r + 1, 20, r + 2, C.line); set(19, r + 2, C.nose); }
+        blush(16, r + 1);
+        whiskers(20, r);
+        if (p.mouth === 'open') { rect(18, r + 1, 20, r + 2, C.eye); set(19, r + 2, C.nose); }
         if (p.paw) set(20, r + 1, C.nose);
       } else {
         ell(9, 17, 1.8, 1.5, C.dark);
         ell(15.5, hy - 0.5, 4, 3.9, C.fur);
         ell(19.4, hy + 1.6, 2, 1.5, C.light);
         set(20, r, C.nose); set(21, r, C.nose);
-        ell(12.8, hy + 0.5, 1.5, 3, C.dark);
+        ell(12.8, hy + 0.5, 1.5, 3, C.ear);
         eyes(17, r - 1);
-        if (p.mouth === 'tongue') { set(19, r + 2, C.line); rect(19, r + 3, 20, r + 4, PET_TONGUE); }
-        if (p.mouth === 'open') rect(18, r + 2, 20, r + 2, C.line);
+        collar([[13.2, hy + 3.2], [16.4, hy + 3.9]], 15.6, hy + 4.3);
+        if (p.mouth === 'tongue') { set(19, r + 2, C.eye); rect(19, r + 3, 20, r + 4, PET_TONGUE); }
+        if (p.mouth === 'open') rect(18, r + 2, 20, r + 2, C.eye);
       }
     }
 
-    // Outline: every empty pixel touching the pet.
-    const out = grid.slice();
-    for (let y = 0; y < PET_H; y++) {
-      for (let x = 0; x < PET_W; x++) {
-        if (grid[y * PET_W + x]) continue;
-        const near = (x > 0 && grid[y * PET_W + x - 1]) || (x < PET_W - 1 && grid[y * PET_W + x + 1]) ||
-          (y > 0 && grid[(y - 1) * PET_W + x]) || (y < PET_H - 1 && grid[(y + 1) * PET_W + x]);
-        if (near) out[y * PET_W + x] = C.line;
-      }
-    }
+    G.shade({ [C.fur]: [C.hi, C.shade], [C.light]: [null, C.lightShade] });
+    G.outline(C.line);
+    after.forEach((draw) => draw());
     if (p.pose === 'lie' && p.z) {
       [[12, 9, ['###', '..#', '.#.', '###']], [7, 5, ['####', '..#.', '.#..', '####']], [2, 0, ['####', '..#.', '.#..', '####']]]
-        .slice(0, p.z).forEach(([x, y, rows]) => pattern(x, y, rows, PET_ZZZ, out));
+        .slice(0, p.z).forEach(([x, y, rows]) => G.pattern(x, y, rows, PET_ZZZ));
     }
-    if (p.heart) pattern(heartAt[0], heartAt[1], ['.#.#.', '#####', '#####', '.###.', '..#..'], PET_HEART, out);
-    return out;
+    if (p.heart) G.pattern(heartAt[0], heartAt[1], ['.#.#.', '#####', '#####', '.###.', '..#..'], PET_HEART);
+    return G.g;
   }
+
+  // The cat's cushion (CUSHION_W×CUSHION_H) or the dog's house (HOUSE_W×HOUSE_H).
+  function homeSprite(kind) {
+    if (kind === 'cat') {
+      const K = HOME_COLORS.cushion;
+      const G = pixelGrid(CUSHION_W, CUSHION_H);
+      G.ell(11, 4, 10, 3, K.base);
+      G.rect(1.5, 4, 20, 5.5, K.base);
+      G.ell(11, 5.8, 10.2, 1.4, K.base);
+      G.shade({ [K.base]: [K.hi, K.shade] });
+      // Button tufts pulling the fabric in.
+      [[11, 7], [22, 6], [33, 7]].forEach(([x, y]) => {
+        G.dot(x - 1, y, K.tuft); G.dot(x, y + 1, K.tuft); G.dot(x + 1, y, K.tuft); G.dot(x, y + 2, K.hi);
+      });
+      G.hline(4, 11, 39, 11, K.piping);
+      G.outline(K.line);
+      return { px: G.g, w: CUSHION_W, h: CUSHION_H };
+    }
+    const K = HOME_COLORS.house;
+    const G = pixelGrid(HOUSE_W, HOUSE_H);
+    G.rect(2.5, 9, 19.5, 19, K.wall);
+    G.rect(8, 15, 14, 19, K.door);
+    G.ell(11.5, 15, 3.5, 2.6, K.door);
+    G.shade({ [K.wall]: [K.wallHi, K.wallShade] });
+    [26, 33].forEach((y) => { G.hline(6, y, 15, y, K.plank); G.hline(30, y, 39, y, K.plank); });
+    G.tri([0.6, 10.8], [11.5, 0.8], [22.4, 10.8], K.roof);
+    G.shade({ [K.roof]: [K.roofHi, K.roofShade] });
+    G.hline(2, 21, 43, 21, K.trim);
+    G.outline(K.line);
+    return { px: G.g, w: HOUSE_W, h: HOUSE_H };
+  }
+
+  function paint(canvas, px, w) {
+    const ctx = canvas.getContext('2d');
+    const s = canvas.width / w;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < px.length; i++) {
+      if (!px[i]) continue;
+      ctx.fillStyle = px[i];
+      ctx.fillRect((i % w) * s, Math.floor(i / w) * s, s, s);
+    }
+  }
+
+  // queue: steps still to run, each { act, ms } | { walk: x | 'home', speed }
+  // | { away: ms } | { at: x } (reappear there).
+  const pet = {
+    kind: 'off', raf: 0, ctx: null, last: 0, drawn: '',
+    act: 'sit', step: null, stepUntil: 0, walkStart: 0, walked: 0, queue: [], facing: 1,
+    x: null, home: 10, base: 10, floor: 0, nextOuting: 0, blinkAt: -1e9, heartUntil: 0,
+  };
 
   function setPet(kind) {
     kind = kind in PET_COLORS ? kind : 'off';
     if (kind === pet.kind) return;
     pet.kind = kind;
-    clearInterval(pet.timer);
-    document.getElementById('pet').hidden = kind === 'off';
+    pet.drawn = '';
+    cancelAnimationFrame(pet.raf);
+    const el = document.getElementById('pet');
+    const homeEl = document.getElementById('pet-home');
+    el.hidden = homeEl.hidden = kind === 'off';
     if (kind === 'off') return;
-    startPetAct('sit');
+    const home = homeSprite(kind);
+    const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1));
+    homeEl.width = home.w * dpr;
+    homeEl.height = home.h * dpr;
+    homeEl.style.width = home.w + 'px';
+    homeEl.style.height = home.h + 'px';
+    paint(homeEl, home.px, home.w);
     positionPet();
-    petTick();
-    pet.timer = setInterval(petTick, 125);
+    pet.x = pet.home;
+    pet.queue = [];
+    setPetAway(false);
+    pet.last = performance.now();
+    pet.nextOuting = pet.last + 30000; // settle in first
+    nextPetStep(pet.last);
+    pet.raf = requestAnimationFrame(petFrame);
   }
 
   function choosePet(kind) {
@@ -2290,126 +2447,167 @@
     vscode.postMessage({ type: 'setPet', pet: kind });
   }
 
-  // Where the pet can be: its feet line `y` and the left edge range it can
-  // walk along. Below the pill when docked left or right (on top of it if
-  // there's no room), beside it when docked at the top or bottom.
-  function petSpot() {
-    const w = PET_W * PET_SCALE, h = PET_H * PET_SCALE, W = window.innerWidth;
-    const t = document.getElementById('tools').getBoundingClientRect();
-    const mid = t.left + t.width / 2 - w / 2;
-    if (state.dock === 'left' || state.dock === 'right') {
-      const left = state.dock === 'left';
-      const stylebarTop = document.getElementById('stylebar').getBoundingClientRect().top;
-      if (stylebarTop - t.bottom >= h + 6) {
-        return { y: t.bottom + 2 + h, home: mid, min: left ? 6 : t.left - 30, max: left ? t.right + 30 - w : W - w - 6 };
-      }
-      if (t.top >= h + 6) return { y: t.top + 1, home: mid, min: t.left - 4, max: t.right + 4 - w };
-      return null;
-    }
-    const limit = state.dock === 'top'
-      ? document.getElementById('commit').getBoundingClientRect().left - 8
-      : W - 8;
-    const max = Math.min(t.right + 6 + 80, limit - w);
-    if (max >= t.right + 6) return { y: t.bottom, home: t.right + 6, min: t.right + 6, max };
-    const min = Math.max(8, t.left - 6 - 80 - w);
-    if (t.left - 6 - w >= min) return { y: t.bottom, home: t.left - 6 - w, min, max: t.left - 6 - w };
-    return null;
-  }
-
+  // The floor is just above the style bar (above the pill when that's docked
+  // at the bottom; the pet walks behind it). Home is at the left edge, or
+  // just right of a left-docked pill that reaches down to the floor.
   function positionPet() {
     if (pet.kind === 'off') return;
+    const t = document.getElementById('tools').getBoundingClientRect();
+    pet.floor = document.getElementById('stylebar').getBoundingClientRect().top - 3;
+    const tallest = pet.kind === 'cat' ? PET_H + CUSHION_LIFT : HOUSE_H;
+    pet.base = state.dock === 'left' && t.bottom > pet.floor - tallest - 4 ? t.right + 8 : 8;
+    pet.home = pet.kind === 'cat' ? pet.base : pet.base + HOUSE_GAP;
+    if (pet.x === null) pet.x = pet.home;
+    const homeEl = document.getElementById('pet-home');
+    const hx = pet.kind === 'cat' ? pet.base - 2 : pet.base;
+    const hh = pet.kind === 'cat' ? CUSHION_H : HOUSE_H;
+    homeEl.style.transform = 'translate3d(' + hx + 'px, ' + (pet.floor - hh + 2) + 'px, 0)';
+    placePet();
+  }
+
+  // Moved with a transform every frame, snapped to device pixels so the pixel
+  // art stays crisp. Near home the cat steps up onto its cushion.
+  function placePet() {
+    const dpr = window.devicePixelRatio || 1;
+    const lift = pet.kind === 'cat' ? CUSHION_LIFT * Math.max(0, Math.min(1, 1 - Math.abs(pet.x - pet.home) / 16)) : 0;
+    const x = Math.round(pet.x * dpr) / dpr;
+    const y = Math.round((pet.floor - PET_H - lift) * dpr) / dpr;
+    document.getElementById('pet').style.transform = 'translate3d(' + x + 'px, ' + y + 'px, 0)';
+  }
+
+  function setPetAway(away) {
+    document.getElementById('pet').style.visibility = away ? 'hidden' : '';
+  }
+
+  const PET_TRICKS = { cat: ['groom', 'groom', 'yawn', 'look'], dog: ['pant', 'pant', 'wag', 'look'] };
+  const PET_ACT_MS = { sit: 3000, groom: 2600, pant: 3200, wag: 2000, yawn: 1300, look: 1200, sleep: 15000 };
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = (list) => list[Math.floor(Math.random() * list.length)];
+
+  // A random little routine. Outings (a stroll, a change of heart halfway,
+  // walking off an edge) are rare and at least a minute apart, so it doesn't
+  // distract; it always comes back in through the edge it left by.
+  function planPet(now) {
+    const w = PET_W, W = window.innerWidth, home = pet.home;
+    const span = Math.max(80, W - w - 20 - home);
+    const out = (a, b) => home + rand(a, b) * span;
+    const sit = (a = 4000, b = 10000) => ({ act: 'sit', ms: rand(a, b) });
+    const trick = () => ({ act: pick(PET_TRICKS[pet.kind]) });
+    const walk = (to) => ({ walk: to, speed: rand(30, 52) }); // px per second
+    const left = -w - 12, right = W + 12;
+    const plans = [
+      [10, () => [sit(), trick()]],
+      [2.5, () => [{ act: 'sleep', ms: rand(12000, 30000) }, { act: 'yawn' }]],
+    ];
+    if (!REDUCED_MOTION.matches && now >= pet.nextOuting) {
+      plans.push(
+        // Out to somewhere, hang about, come home.
+        [0.8, () => [walk(out(0.2, 0.7)), sit(1500, 5000), Math.random() < 0.5 ? trick() : sit(800, 2000), walk('home')]],
+        // Change of heart partway.
+        [0.6, () => [walk(out(0.15, 0.45)), { act: 'look' }, walk('home')]],
+        // All the way across and out on the right; back in from the right.
+        [0.35, () => [walk(right), { away: rand(8000, 30000) }, { at: right }, walk('home')]],
+        // Slips out on the left; back in from the left.
+        [0.25, () => [walk(left), { away: rand(6000, 20000) }, { at: left }, walk('home')]],
+      );
+    }
+    let roll = Math.random() * plans.reduce((n, [weight]) => n + weight, 0);
+    for (const [i, [weight, plan]] of plans.entries()) {
+      roll -= weight;
+      if (roll >= 0) continue;
+      if (i >= 2) pet.nextOuting = now + rand(60000, 150000);
+      return plan();
+    }
+    return [sit()];
+  }
+
+  function nextPetStep(now) {
+    if (!pet.queue.length) pet.queue = planPet(now);
+    const s = pet.queue.shift();
+    pet.step = s;
     const el = document.getElementById('pet');
-    const spot = petSpot();
-    pet.spot = spot;
-    el.style.visibility = spot ? '' : 'hidden';
-    if (!spot) return;
-    const x = pet.x === null ? spot.home : pet.x;
-    pet.x = Math.max(spot.min, Math.min(spot.max, x));
-    if (pet.act === 'walk') pet.target = Math.max(spot.min, Math.min(spot.max, pet.target));
-    el.style.left = pet.x + 'px';
-    el.style.top = spot.y - PET_H * PET_SCALE + 'px';
-  }
-
-  const PET_ACTS = {
-    cat: [['walk', 3], ['groom', 3], ['yawn', 1], ['look', 2], ['sleep', 2]],
-    dog: [['walk', 3], ['pant', 3], ['wag', 2], ['look', 2], ['sleep', 2]],
-  };
-
-  function startPetAct(act) {
-    const now = performance.now();
-    pet.act = act;
-    pet.actUntil = now + ({
-      sit: 3000 + Math.random() * 4000, groom: 2600, pant: 3200, wag: 2000, yawn: 1300,
-      look: 1600, sleep: 10000 + Math.random() * 12000, walk: 15000,
-    })[act];
-    if (act === 'look') pet.facing = -pet.facing;
-    if (act === 'walk' && pet.spot) {
-      const { min, max } = pet.spot;
-      pet.target = min + Math.random() * (max - min);
-      pet.facing = pet.target >= pet.x ? 1 : -1;
+    el.style.pointerEvents = '';
+    if (s.at !== undefined) {
+      pet.x = s.at;
+      placePet();
+      setPetAway(false);
+      nextPetStep(now);
+    } else if (s.walk !== undefined) {
+      pet.act = 'walk';
+      pet.walkStart = now;
+      el.style.pointerEvents = 'none'; // never in the way of drawing
+      const to = s.walk === 'home' ? pet.home : s.walk;
+      if (to !== pet.x) pet.facing = to > pet.x ? 1 : -1;
+    } else if (s.away) {
+      pet.act = 'away';
+      pet.stepUntil = now + s.away;
+      setPetAway(true);
+    } else {
+      pet.act = s.act;
+      pet.stepUntil = now + (s.ms || PET_ACT_MS[s.act]);
+      if (s.act === 'look') pet.facing = -pet.facing;
+      else if (pet.x === pet.home && s.act !== 'sit') pet.facing = 1; // settles facing into the room
     }
   }
 
-  function nextPetAct() {
-    const canWalk = !REDUCED_MOTION.matches && pet.spot && pet.spot.max - pet.spot.min > 16;
-    const acts = PET_ACTS[pet.kind].filter(([a]) => a !== 'walk' || canWalk);
-    let roll = Math.random() * acts.reduce((n, [, w]) => n + w, 0);
-    for (const [a, w] of acts) { roll -= w; if (roll < 0) return a; }
-    return 'sit';
-  }
-
-  function petTick() {
-    if (document.hidden || pet.kind === 'off') return;
-    const now = performance.now();
-    pet.tick++;
-    if (now >= pet.actUntil) {
-      if (pet.act === 'look') pet.facing = -pet.facing;
-      startPetAct(pet.act === 'sit' ? nextPetAct() : 'sit');
-    }
+  // Runs every animation frame (paused by the browser in background tabs).
+  // Walking eases in and out and the walk cycle advances with the distance
+  // covered, so the feet don't slide; the sprite is only redrawn when the
+  // pose changes.
+  function petFrame(now) {
+    pet.raf = requestAnimationFrame(petFrame);
+    const dt = Math.min(100, now - pet.last);
+    pet.last = now;
     if (pet.act === 'walk') {
-      const step = 2.5;
-      if (Math.abs(pet.target - pet.x) <= step) { pet.x = pet.target; startPetAct('sit'); }
-      else pet.x += Math.sign(pet.target - pet.x) * step;
-      document.getElementById('pet').style.left = pet.x + 'px';
+      const to = pet.step.walk === 'home' ? pet.home : pet.step.walk;
+      const dist = to - pet.x;
+      const ease = Math.min(1, (now - pet.walkStart) / 350) * Math.min(1, Math.max(0.35, Math.abs(dist) / 36));
+      const step = pet.step.speed * ease * dt / 1000;
+      if (Math.abs(dist) <= Math.max(step, 0.3)) { pet.x = to; nextPetStep(now); }
+      else { pet.x += Math.sign(dist) * step; pet.walked += step; }
+      placePet();
+    } else if (now >= pet.stepUntil) {
+      nextPetStep(now);
     }
-    if (pet.act === 'sit' && now - pet.blinkAt > 2000 && Math.random() < 0.04) pet.blinkAt = now;
+    if (pet.act === 'away') return;
+    if (pet.act === 'sit' && now - pet.blinkAt > 2000 && Math.random() < dt / 1000 * 0.35) pet.blinkAt = now;
 
-    const t = pet.tick;
+    const t = now / 125; // the animation clock, in 125ms beats
+    const q = (v) => Math.round(v * 4) / 4; // fewer distinct tail positions to draw
     const blink = now - pet.blinkAt < 180;
-    const p = { pose: 'sit', swing: Math.sin(t * 0.35) * 0.7, eyes: blink ? 'shut' : 'open', mouth: 'shut', heart: now < pet.heartUntil };
-    if (pet.kind === 'dog') p.swing = Math.sin(t * 0.9) * 0.6;
-    if (pet.act === 'groom') Object.assign(p, { paw: (t >> 1) % 2 === 0, headDown: true, eyes: 'shut' });
+    const p = { pose: 'sit', swing: q(Math.sin(t * 0.35) * 0.7), eyes: blink ? 'shut' : 'open', mouth: 'shut', heart: now < pet.heartUntil };
+    if (pet.kind === 'dog') p.swing = q(Math.sin(t * 0.9) * 0.6);
+    if (pet.act === 'groom') Object.assign(p, { paw: Math.floor(t / 2) % 2 === 0, headDown: true, eyes: 'shut' });
     if (pet.act === 'yawn') Object.assign(p, { mouth: 'open', eyes: 'shut' });
-    if (pet.act === 'pant') Object.assign(p, { mouth: 'tongue', swing: Math.sin(t * 1.6) });
-    if (pet.act === 'wag') p.swing = t % 2 ? 1 : -1;
-    if (pet.act === 'walk') Object.assign(p, { pose: 'stand', leg: t % 2, mouth: pet.kind === 'dog' ? 'tongue' : 'shut' });
+    if (pet.act === 'pant') Object.assign(p, { mouth: 'tongue', swing: q(Math.sin(t * 1.6)) });
+    if (pet.act === 'wag') p.swing = Math.floor(t) % 2 ? 1 : -1;
+    if (pet.act === 'walk') Object.assign(p, { pose: 'stand', leg: Math.floor(pet.walked / 5) % 4, mouth: pet.kind === 'dog' ? 'tongue' : 'shut' });
     if (pet.act === 'sleep') Object.assign(p, { pose: 'lie', eyes: 'shut', z: Math.floor(t / 5) % 4, swing: 0 });
     if (REDUCED_MOTION.matches) p.swing = 0;
 
-    const px = petSprite(pet.kind, p);
-    const ctx = pet.ctx;
-    const s = ctx.canvas.width / PET_W;
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    for (let i = 0; i < px.length; i++) {
-      if (!px[i]) continue;
-      ctx.fillStyle = px[i];
-      ctx.fillRect((i % PET_W) * s, Math.floor(i / PET_W) * s, s, s);
-    }
-    ctx.canvas.style.transform = pet.facing < 0 ? 'scaleX(-1)' : '';
+    const key = JSON.stringify(p) + pet.facing;
+    if (key === pet.drawn) return;
+    pet.drawn = key;
+    paint(pet.ctx.canvas, petSprite(pet.kind, p), PET_W);
+    pet.ctx.canvas.style.transform = pet.facing < 0 ? 'scaleX(-1)' : '';
   }
 
   function attachPet() {
     const el = document.getElementById('pet');
     const cv = el.querySelector('canvas');
     const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1));
-    cv.width = PET_W * PET_SCALE * dpr;
-    cv.height = PET_H * PET_SCALE * dpr;
+    cv.width = PET_W * dpr;
+    cv.height = PET_H * dpr;
     pet.ctx = cv.getContext('2d');
-    // Click to pet: a hop and a heart; a napping pet wakes up instead.
+    // Click to pet: a hop and a heart (and a wag); a napping pet wakes up.
     el.addEventListener('click', () => {
-      if (pet.act === 'sleep') { startPetAct('yawn'); return; }
+      if (pet.act === 'sleep') {
+        pet.queue.unshift({ act: 'yawn' });
+        pet.stepUntil = 0;
+        return;
+      }
       pet.heartUntil = performance.now() + 1200;
-      if (pet.kind === 'dog') startPetAct('wag');
+      if (pet.kind === 'dog' && pet.act === 'sit') { pet.queue.unshift({ act: 'wag' }); pet.stepUntil = 0; }
       if (REDUCED_MOTION.matches) return;
       el.classList.remove('hop');
       void el.offsetWidth;
