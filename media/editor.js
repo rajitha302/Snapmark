@@ -27,6 +27,50 @@
   const MIN_ZOOM = 0.2;
   const MAX_ZOOM = 8;
 
+  // Figma-style comment: editable text inside a speech bubble whose sharp
+  // corner (`tail`: 'bl' | 'br' | 'tl' | 'tr') sits on the clicked point. The
+  // origin is that corner, so the bubble grows away from the point as you type.
+  fabric.CommentBubble = fabric.util.createClass(fabric.IText, {
+    type: 'commentBubble',
+    objectCaching: false, // the bubble is drawn outside the text's own bounds
+
+    initialize: function (text, options) {
+      this.callSuper('initialize', text, options);
+      this.padding = Math.round(this.fontSize * 0.6);
+    },
+
+    toObject: function (props) {
+      return this.callSuper('toObject', ['tail'].concat(props || []));
+    },
+
+    _renderBackground: function (ctx) {
+      const pad = this.padding;
+      const w = this.width + pad * 2;
+      const h = this.height + pad * 2;
+      const r = Math.min(pad * 1.6, h / 2);
+      const radii = { tl: r, tr: r, br: r, bl: r };
+      radii[this.tail] = 0;
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(-w / 2, -h / 2, w, h, [radii.tl, radii.tr, radii.br, radii.bl]);
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+      ctx.shadowBlur = pad;
+      ctx.shadowOffsetY = pad * 0.25;
+      ctx.fillStyle = this.backgroundColor;
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.lineWidth = Math.max(2, this.fontSize * 0.08);
+      ctx.strokeStyle = isLightColor(this.backgroundColor) ? 'rgba(0, 0, 0, 0.18)' : '#ffffff';
+      ctx.stroke();
+      ctx.restore();
+    },
+  });
+
+  fabric.CommentBubble.fromObject = function (object, callback) {
+    const styles = fabric.util.stylesFromArray(object.styles, object.text);
+    return fabric.Object._fromObject('CommentBubble', Object.assign({}, object, { styles }), callback, 'text');
+  };
+
   function init() {
     const el = document.getElementById('canvas');
     state.canvas = new fabric.Canvas(el, {
@@ -317,6 +361,10 @@
         state.isDrawing = false;
         placeNumberMarker(p.x, p.y);
         return;
+      } else if (state.tool === 'comment') {
+        state.isDrawing = false;
+        placeComment(p.x, p.y);
+        return;
       } else if (state.tool === 'text') {
         state.isDrawing = false;
         const text = new fabric.IText('Text', {
@@ -407,6 +455,17 @@
     });
 
     c.on('object:modified', () => snapshot());
+
+    // A comment left empty after editing is a misclick; drop it. Deferred
+    // because fabric still uses obj.canvas after firing this event.
+    c.on('text:editing:exited', (e) => {
+      const t = e.target;
+      if (!t || t.type !== 'commentBubble' || t.text.trim()) return;
+      queueMicrotask(() => {
+        c.remove(t);
+        snapshot();
+      });
+    });
   }
 
   function arrowPath(x1, y1, x2, y2, width, twoWay) {
@@ -633,6 +692,45 @@
     snapshot();
   }
 
+  function isLightColor(hex) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.7;
+  }
+
+  function placeComment(x, y) {
+    const c = state.canvas;
+    const fontSize = Math.round(20 + state.width * 2.5);
+    const pad = Math.round(fontSize * 0.6);
+    // Point from the bottom-left like Figma, but flip near the right/top edges
+    // so the bubble grows into the image instead of off it.
+    const vertical = y < state.imgH * 0.25 ? 't' : 'b';
+    const horizontal = x > state.imgW * 0.6 ? 'r' : 'l';
+    const bubble = new fabric.CommentBubble('Comment', {
+      tail: vertical + horizontal,
+      originX: horizontal === 'l' ? 'left' : 'right',
+      originY: vertical === 'b' ? 'bottom' : 'top',
+      left: x + (horizontal === 'l' ? pad : -pad),
+      top: y + (vertical === 'b' ? -pad : pad),
+      fontSize,
+      // Not the system font: fabric measures glyphs at 400px, where SF's
+      // optical sizing is narrower than the rendered size, so the bubble
+      // came out too small and clipped the last characters.
+      fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      fontWeight: '500',
+      fill: isLightColor(state.color) ? '#1c1c1e' : '#ffffff',
+      backgroundColor: state.color,
+      data: { kind: 'comment' },
+    });
+    c.add(bubble);
+    setTool('select');
+    c.setActiveObject(bubble);
+    bubble.enterEditing();
+    bubble.selectAll();
+    snapshot();
+  }
+
   function reseedNumberCounter() {
     let max = 0;
     state.canvas.getObjects().forEach((o) => {
@@ -729,6 +827,7 @@
       else if (k === 'c' || k === 'C') setTool('crop');
       else if (k === 'b' || k === 'B') setTool('redact');
       else if (k === 'n' || k === 'N') setTool('number');
+      else if (k === 'm' || k === 'M') setTool('comment');
       else if ((k === 'Delete' || k === 'Backspace') && state.tool === 'select') {
         const obj = state.canvas.getActiveObject();
         if (!obj) return;

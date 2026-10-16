@@ -12,6 +12,7 @@ If there is no image on the clipboard, click the pencil anyway. You can drag an 
 
 - Redact sensitive areas with a solid block (API keys, names, anything you don't want in the image)
 - Drop numbered step markers onto UI flows
+- Leave Figma-style comment bubbles that point at a spot on the screenshot
 - Pen, arrow, two-way arrow, rectangle, ellipse, text, highlight, crop
 - Zoom with `Cmd/Ctrl` + scroll or a trackpad pinch
 - Resize large screenshots automatically on copy
@@ -48,6 +49,7 @@ Linux users need `xclip` (X11) or `wl-clipboard` (Wayland). macOS and Windows wo
 | `E` | Ellipse |
 | `H` | Highlight |
 | `T` | Text |
+| `M` | Comment bubble |
 | `C` | Crop |
 | `B` | Redact |
 | `N` | Numbered step |
