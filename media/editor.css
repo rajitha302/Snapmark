@@ -127,11 +127,26 @@ body[data-dock="top"] #tools { top: 12px; left: 12px; max-width: calc(100% - 276
 body[data-dock="bottom"] #tools { left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); }
 
 #tools.dragging {
+  z-index: 30; /* above the other bars while it's moving */
   cursor: grabbing;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.42),
     0 24px 48px rgba(0, 0, 0, 0.45);
 }
+
+/* Snap preview shown while dragging the tool pill: where it will land. */
+#dock-hint {
+  position: fixed;
+  z-index: 9;
+  pointer-events: none;
+  border-radius: 26px;
+  border: 2px solid rgba(10, 132, 255, 0.85);
+  background: rgba(10, 132, 255, 0.16);
+  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.12), 0 0 28px rgba(10, 132, 255, 0.4);
+  opacity: 0;
+  transition: left 0.16s ease, top 0.16s ease, width 0.16s ease, height 0.16s ease, opacity 0.12s ease;
+}
+#dock-hint.visible { opacity: 1; }
 
 button.grip {
   color: var(--ink-dim);
@@ -497,6 +512,7 @@ button.menu-item.danger:focus-visible { background: #ff3b30; color: #fff; }
 
 @media (prefers-reduced-motion: reduce) {
   #context-menu { animation: none; }
+  #dock-hint { transition: none; }
   button { transition: none; }
   button:active, button.swatch:hover { transform: none; }
 }

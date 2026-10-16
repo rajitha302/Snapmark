@@ -255,6 +255,46 @@
       setDock(dock);
       vscode.postMessage({ type: 'toolsDock', dock });
     };
+    const hint = document.getElementById('dock-hint');
+    const nearestDock = (x, y) => {
+      const dist = { left: x, right: window.innerWidth - x, top: y, bottom: window.innerHeight - y };
+      return DOCKS.reduce((a, b) => (dist[b] < dist[a] ? b : a));
+    };
+    // Where the pill would land on `dock`, mirroring the #tools CSS: grid
+    // cells of --tool with 2px gaps, 6px padding+border per side, wrapping
+    // into extra lines when the edge's max length is exceeded.
+    const landingRect = (dock) => {
+      const cell = parseFloat(getComputedStyle(tools).getPropertyValue('--tool'));
+      const n = tools.children.length;
+      const narrow = window.matchMedia('(max-width: 520px)').matches;
+      const W = window.innerWidth, H = window.innerHeight;
+      const maxLen = {
+        left: H - 168, right: H - 168,
+        top: W - (narrow ? 256 : 276), bottom: W - 24,
+      }[dock];
+      const perLine = Math.max(1, Math.min(n, Math.floor((maxLen - 12 + 2) / (cell + 2))));
+      const lines = Math.ceil(n / perLine);
+      const len = perLine * cell + (perLine - 1) * 2 + 12;
+      const thick = lines * cell + (lines - 1) * 2 + 12;
+      if (dock === 'left') return { x: 12, y: (H - len) / 2, w: thick, h: len };
+      if (dock === 'right') return { x: W - 12 - thick, y: (H - len) / 2, w: thick, h: len };
+      if (dock === 'top') return { x: 12, y: 12, w: len, h: thick };
+      const stylebarTop = document.getElementById('stylebar').getBoundingClientRect().top;
+      return { x: (W - len) / 2, y: stylebarTop - 10 - thick, w: len, h: thick };
+    };
+    const showHint = (dock) => {
+      const r = landingRect(dock);
+      const first = !hint.classList.contains('visible');
+      if (first) hint.style.transition = 'none'; // appear in place, then glide between edges
+      Object.assign(hint.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' });
+      if (first) {
+        void hint.offsetWidth;
+        hint.style.transition = '';
+        hint.classList.add('visible');
+      }
+    };
+    const hideHint = () => hint.classList.remove('visible');
+
     let drag = null;
     grip.addEventListener('pointerdown', (e) => {
       const r = tools.getBoundingClientRect();
@@ -271,16 +311,17 @@
         left: e.clientX - drag.dx + 'px', top: e.clientY - drag.dy + 'px',
         right: 'auto', bottom: 'auto', transform: 'none',
       });
+      showHint(nearestDock(e.clientX, e.clientY));
     });
     const end = (e) => {
       if (!drag || e.pointerId !== drag.id) return;
       const moved = drag.moved;
       drag = null;
       tools.classList.remove('dragging');
+      hideHint();
       if (!moved) return;
       if (e.type === 'pointercancel') { setDock(state.dock); return; }
-      const dist = { left: e.clientX, right: window.innerWidth - e.clientX, top: e.clientY, bottom: window.innerHeight - e.clientY };
-      commit(DOCKS.reduce((a, b) => (dist[b] < dist[a] ? b : a)));
+      commit(nearestDock(e.clientX, e.clientY));
     };
     grip.addEventListener('pointerup', end);
     grip.addEventListener('pointercancel', end);
