@@ -5,7 +5,7 @@
 
   const state = {
     tool: 'pen',
-    color: '#ef4444',
+    color: '#ff3b30',
     width: 4,
     canvas: null,
     imgW: 0,
@@ -100,7 +100,7 @@
         '<div class="empty-inner">' +
           '<div class="empty-title">Drop an image here</div>' +
           '<div class="empty-sub">or paste from clipboard (' + pasteKey + ')</div>' +
-          '<button id="empty-pick" class="action secondary" type="button">Choose file…</button>' +
+          '<button id="empty-pick" class="action glass" type="button">Choose file…</button>' +
           '<input id="empty-file" type="file" accept="image/*" hidden />' +
         '</div>';
       const fileInput = document.getElementById('empty-file');
@@ -155,8 +155,14 @@
 
   function applyFitScale() {
     const wrap = document.getElementById('canvas-wrap');
+    // The bars float over the stage and wrap at narrow widths, so fit the
+    // image into the gap between them.
+    const top = document.getElementById('topbar').getBoundingClientRect().bottom + 16;
+    const bottom = window.innerHeight - document.getElementById('stylebar').getBoundingClientRect().top + 16;
+    wrap.style.paddingTop = top + 'px';
+    wrap.style.paddingBottom = bottom + 'px';
     const maxW = wrap.clientWidth - 48;
-    const maxH = wrap.clientHeight - 48;
+    const maxH = wrap.clientHeight - top - bottom;
     const fit = Math.min(1, maxW / state.imgW, maxH / state.imgH);
     state.scale = fit;
     const effective = fit * state.zoom;

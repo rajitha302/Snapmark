@@ -1,17 +1,24 @@
+/* Liquid-glass chrome floating over a graphite stage. The bars stay readable
+   over bright screenshots because the glass carries a mid-grey tint rather
+   than being fully clear. */
 :root {
-  --bg: var(--vscode-editor-background, #1e1e1e);
-  --fg: var(--vscode-editor-foreground, #d4d4d4);
-  --toolbar-bg: var(--vscode-titleBar-activeBackground, #2d2d30);
-  --toolbar-border: var(--vscode-panel-border, #3c3c3c);
-  --btn-bg: transparent;
-  --btn-hover: var(--vscode-toolbar-hoverBackground, #3c3c3c);
-  --btn-active: var(--vscode-toolbar-activeBackground, #4c4c50);
-  --btn-active-fg: var(--vscode-button-background, #0e639c);
-  --accent: var(--vscode-button-background, #0e639c);
-  --accent-fg: var(--vscode-button-foreground, #ffffff);
-  --danger: #f85149;
-  --canvas-bg: #0a0a0a;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --ink: #f5f5f7;
+  --ink-dim: rgba(245, 245, 247, 0.62);
+  --stage-1: #75777d;
+  --stage-2: #56585d;
+  --stage-3: #303135;
+  --glass-tint: rgba(72, 74, 80, 0.58);
+  --glass-sheen-top: rgba(255, 255, 255, 0.16);
+  --glass-sheen-bottom: rgba(255, 255, 255, 0.03);
+  --glass-edge: rgba(255, 255, 255, 0.22);
+  --glass-solid: #4a4b50;
+  --lens-top: rgba(255, 255, 255, 0.34);
+  --lens-bottom: rgba(255, 255, 255, 0.14);
+  --hover: rgba(255, 255, 255, 0.12);
+  --blue-top: #3d9bff;
+  --blue-bottom: #0a7aff;
+  --blue-glow: rgba(10, 122, 255, 0.45);
+  --focus: #0a84ff;
 }
 
 * { box-sizing: border-box; }
@@ -20,29 +27,86 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-  font-size: 13px;
   overflow: hidden;
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  background: radial-gradient(120% 90% at 50% 38%, var(--stage-1) 0%, var(--stage-2) 48%, var(--stage-3) 100%) fixed;
 }
 
-body {
-  display: flex;
-  flex-direction: column;
+/* ---------------------------------------------------------------------------
+   Glass material
+   ------------------------------------------------------------------------- */
+
+.glass {
+  background:
+    linear-gradient(180deg, var(--glass-sheen-top), var(--glass-sheen-bottom)),
+    var(--glass-tint);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--glass-edge);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+    0 10px 30px rgba(0, 0, 0, 0.28),
+    0 1px 2px rgba(0, 0, 0, 0.22);
 }
 
-#toolbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 12px;
-  background: var(--toolbar-bg);
-  border-bottom: 1px solid var(--toolbar-border);
-  flex-shrink: 0;
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass { background: var(--glass-solid); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: var(--glass-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Layout: bars float above a full-bleed scrolling stage
+   ------------------------------------------------------------------------- */
+
+#topbar {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  right: 12px;
   z-index: 10;
+  display: flex;
   flex-wrap: wrap;
-  box-shadow: var(--shadow);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  pointer-events: none;
+}
+#topbar > * { pointer-events: auto; }
+
+#commit {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 5px;
+  border-radius: 26px;
+}
+
+#stylebar {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  justify-content: center;
 }
 
 .tool-group {
@@ -53,184 +117,246 @@ body {
 
 .divider {
   width: 1px;
-  height: 22px;
-  background: var(--toolbar-border);
-  margin: 0 4px;
+  height: 24px;
+  margin: 0 6px;
+  background: rgba(255, 255, 255, 0.18);
 }
 
-.spacer { flex: 1; }
+/* Vertical padding is set from the bar heights in applyFitScale(). */
+#canvas-wrap {
+  position: fixed;
+  inset: 0;
+  overflow: auto;
+  display: flex;
+  align-items: safe center;
+  justify-content: safe center;
+  padding: 96px 24px 104px;
+}
+
+.canvas-container {
+  flex-shrink: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 24px 60px rgba(0, 0, 0, 0.42),
+    0 4px 14px rgba(0, 0, 0, 0.25);
+  /* Only visible through transparent pixels in the screenshot. */
+  background-color: #e9e9ec;
+  background-image:
+    linear-gradient(45deg, #d4d4d8 25%, transparent 25%),
+    linear-gradient(-45deg, #d4d4d8 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #d4d4d8 75%),
+    linear-gradient(-45deg, transparent 75%, #d4d4d8 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+body:not(.loaded) .canvas-container { visibility: hidden; }
+
+canvas {
+  display: block;
+  cursor: crosshair;
+}
+
+#canvas-wrap::-webkit-scrollbar { width: 10px; height: 10px; }
+#canvas-wrap::-webkit-scrollbar-track { background: transparent; }
+#canvas-wrap::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background-clip: padding-box;
+}
+#canvas-wrap::-webkit-scrollbar-corner { background: transparent; }
+
+/* ---------------------------------------------------------------------------
+   Buttons
+   ------------------------------------------------------------------------- */
 
 button {
-  font-family: inherit;
-  font-size: 13px;
-  color: var(--fg);
-  background: var(--btn-bg);
-  border: 1px solid transparent;
-  padding: 6px 8px;
-  border-radius: 4px;
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 19px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.1s ease, border-color 0.1s ease;
-  min-width: 30px;
-  min-height: 30px;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease, opacity 0.15s ease;
 }
-button:hover { background: var(--btn-hover); }
-button:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
-button:disabled,
-button[disabled] {
-  opacity: 0.4;
+button svg { filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25)); }
+button:hover { background-color: var(--hover); }
+button:active { transform: scale(0.94); }
+button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+button:disabled {
+  opacity: 0.35;
   cursor: default;
   pointer-events: none;
 }
 
-body.empty #toolbar button {
-  opacity: 0.4;
-  cursor: default;
-  pointer-events: none;
-}
-body.empty #toolbar #btn-cancel {
-  opacity: 1;
-  cursor: pointer;
-  pointer-events: auto;
+/* The selected tool or width sits in a lighter glass lens. */
+button.tool[aria-pressed="true"],
+button.width[aria-pressed="true"] {
+  background: linear-gradient(180deg, var(--lens-top), var(--lens-bottom));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.10),
+    0 2px 8px rgba(0, 0, 0, 0.20);
 }
 
-button.tool[aria-pressed="true"] {
-  background: var(--btn-active);
-  border-color: var(--accent);
-  color: var(--fg);
+.width-dot {
+  display: inline-block;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
 }
 
 button.swatch {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  padding: 0;
+  width: 28px;
+  height: 28px;
+  margin: 0 3px;
   border-radius: 50%;
   background: var(--swatch);
-  border: 2px solid transparent;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+button.swatch:hover {
+  background: var(--swatch);
+  transform: scale(1.08);
 }
 button.swatch[aria-pressed="true"] {
-  border-color: var(--fg);
-  box-shadow: 0 0 0 1px var(--bg);
-}
-
-button.width {
-  padding: 6px;
-}
-.width-dot {
-  display: inline-block;
-  background: var(--fg);
-  border-radius: 50%;
-}
-button.width[aria-pressed="true"] {
-  background: var(--btn-active);
-  border-color: var(--accent);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.18),
+    0 0 0 2.5px #3c3d42,
+    0 0 0 4.5px var(--ink);
 }
 
 button.action {
-  padding: 6px 12px;
+  width: auto;
+  height: 38px;
+  padding: 0 14px;
+  font-size: 14px;
   font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
+button.action.icon {
+  width: 38px;
+  padding: 0;
+}
+
+#commit button.action {
+  height: 46px;
+  padding: 0 22px;
+  border-radius: 23px;
+  font-size: 15px;
+}
+#commit button.action.glass:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.08)),
+    var(--glass-tint);
+}
+
 button.action.primary {
-  background: var(--accent);
-  color: var(--accent-fg);
-  border-color: var(--accent);
+  gap: 8px;
+  color: #fff;
+  font-weight: 600;
+  background: linear-gradient(180deg, var(--blue-top), var(--blue-bottom));
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.15),
+    0 6px 22px var(--blue-glow);
 }
 button.action.primary:hover {
-  background: var(--vscode-button-hoverBackground, #1177bb);
-  border-color: var(--vscode-button-hoverBackground, #1177bb);
-}
-button.action.secondary {
-  background: transparent;
-  border-color: var(--toolbar-border);
-}
-button.action.secondary:hover {
-  background: var(--btn-hover);
+  background: linear-gradient(180deg, #57a9ff, #1a84ff);
 }
 
-#canvas-wrap {
-  flex: 1;
-  overflow: auto;
-  background: var(--canvas-bg);
-  background-image:
-    linear-gradient(45deg, #141414 25%, transparent 25%),
-    linear-gradient(-45deg, #141414 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #141414 75%),
-    linear-gradient(-45deg, transparent 75%, #141414 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
-  display: flex;
-  align-items: safe center;
-  justify-content: safe center;
-  position: relative;
-  padding: 24px;
+/* Until an image is loaded, only Close works. */
+body.empty .bar button,
+body.empty #btn-done {
+  opacity: 0.35;
+  pointer-events: none;
 }
 
-canvas {
-  display: block;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
-  cursor: crosshair;
-}
+/* ---------------------------------------------------------------------------
+   Crop confirm + empty state
+   ------------------------------------------------------------------------- */
 
 #crop-actions {
   position: absolute;
+  z-index: 20;
   display: flex;
   gap: 6px;
-  padding: 6px;
-  background: var(--toolbar-bg);
-  border: 1px solid var(--toolbar-border);
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  z-index: 20;
-  pointer-events: auto;
+  padding: 5px;
+  border-radius: 24px;
 }
 #crop-actions[hidden] { display: none; }
+#crop-actions button.action { height: 36px; border-radius: 18px; }
 
 #empty-state {
   position: absolute;
-  inset: 24px;
+  inset: 96px 24px 104px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--vscode-descriptionForeground, #858585);
+  color: var(--ink-dim);
   font-size: 13px;
   pointer-events: none;
-  border-radius: 10px;
 }
 body.loaded #empty-state { display: none; }
-body.empty #empty-state {
-  border: 2px dashed var(--toolbar-border);
-  background: rgba(20, 20, 20, 0.55);
-}
-body.empty #canvas-wrap.dragging #empty-state {
-  border-color: var(--accent);
-  background: rgba(14, 99, 156, 0.18);
-  color: var(--fg);
-}
+
 .empty-inner {
   text-align: center;
-  padding: 24px 32px;
+  padding: 28px 40px;
+  border-radius: 24px;
+  border: 1px dashed rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+#canvas-wrap.dragging .empty-inner {
+  border-color: var(--focus);
+  background: rgba(10, 132, 255, 0.16);
 }
 .empty-title {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
-  color: var(--fg);
-  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-bottom: 4px;
 }
 .empty-sub {
-  font-size: 12px;
-  color: var(--vscode-descriptionForeground, #858585);
-  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--ink-dim);
+  margin-bottom: 18px;
 }
-body.empty #empty-state .empty-inner,
-body.empty #empty-state #empty-pick {
-  pointer-events: auto;
-}
+body.empty #empty-state .empty-inner { pointer-events: auto; }
 #empty-pick {
-  min-height: 32px;
-  padding: 6px 16px;
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 18px;
   font-weight: 500;
+}
+
+/* Narrow panels: tighter buttons so the tools fit on one row, and no
+   dividers, which would dangle at the end of a wrapped row. */
+@media (max-width: 520px) {
+  button.tool, button.width, button.action.icon { width: 34px; height: 34px; }
+  button.swatch { width: 26px; height: 26px; }
+  .divider { display: none; }
+  #stylebar { gap: 4px 10px; }
+  #commit button.action { height: 40px; padding: 0 18px; font-size: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button { transition: none; }
+  button:active, button.swatch:hover { transform: none; }
 }
