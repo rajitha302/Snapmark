@@ -23,6 +23,7 @@ If there is no image on the clipboard, click the pencil anyway. You can drag an 
 - Move the toolbar to any edge by dragging its grip, and drag tools to reorder them. Snapmark remembers both, even after a restart
 - Resize large screenshots automatically on copy
 - Right-click for a menu: duplicate, bring to front, send to back, delete, undo, copy, and download the full-size PNG
+- A little pixel-art cat or dog that hangs out by the toolbar: it naps, grooms, wanders, and hops when you click it. Never part of the copied image. Switch or hide it by right-clicking it
 - A short tour of the editor the first time you open it. Right-click → **Show tips** to see it again
 - Pencil in the status bar lights up when you copy a new image
 
@@ -77,6 +78,7 @@ Linux users need `xclip` (X11) or `wl-clipboard` (Wayland). macOS and Windows wo
 |---------|---------|--------------|
 | `snapmark.clipboardDetection` | `true` | Highlights the status bar when a new image lands on your clipboard. |
 | `snapmark.maxDimension` | `1920` | Longest edge (in pixels) when copying. Set to `0` to keep the original size. |
+| `snapmark.pet` | `cat` | A small pixel-art pet by the toolbar: `cat`, `dog`, or `off`. You can also right-click the pet to switch or hide it. |
 
 ## Privacy
 

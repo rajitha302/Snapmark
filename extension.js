@@ -602,11 +602,22 @@ async function annotateCommand(context) {
         const toolsDock = context.globalState.get('snapmark.toolsDock', 'left');
         const toolsOrder = context.globalState.get('snapmark.toolsOrder', null);
         const tourSeen = context.globalState.get('snapmark.tourSeen', false);
-        panel.webview.postMessage({ type: 'config', maxDimension, toolsDock, toolsOrder, tourSeen });
+        const pet = vscode.workspace.getConfiguration('snapmark').get('pet', 'cat');
+        panel.webview.postMessage({ type: 'config', maxDimension, toolsDock, toolsOrder, tourSeen, pet });
         panel.webview.postMessage({ type: 'loadImage', dataUrl });
       } else if (msg.type === 'toolsDock') {
         if (['left', 'right', 'top', 'bottom'].includes(msg.dock)) {
           context.globalState.update('snapmark.toolsDock', msg.dock);
+        }
+      } else if (msg.type === 'setPet') {
+        if (!['cat', 'dog', 'off'].includes(msg.pet)) return;
+        await vscode.workspace.getConfiguration('snapmark').update('pet', msg.pet, vscode.ConfigurationTarget.Global);
+        if (msg.pet === 'off') {
+          const choice = await vscode.window.showInformationMessage(
+            'Snapmark: pet hidden. You can bring it back in Settings (Snapmark: Pet).',
+            'Open Settings'
+          );
+          if (choice) vscode.commands.executeCommand('workbench.action.openSettings', 'snapmark.pet');
         }
       } else if (msg.type === 'tourSeen') {
         context.globalState.update('snapmark.tourSeen', true);
@@ -673,6 +684,10 @@ function activate(context) {
         .getConfiguration('snapmark')
         .get('maxDimension', 1920);
       currentPanel.webview.postMessage({ type: 'config', maxDimension });
+    }
+    if (e.affectsConfiguration('snapmark.pet') && currentPanel) {
+      const pet = vscode.workspace.getConfiguration('snapmark').get('pet', 'cat');
+      currentPanel.webview.postMessage({ type: 'config', pet });
     }
   });
 

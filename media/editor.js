@@ -274,6 +274,7 @@
         if (typeof msg.maxDimension === 'number') state.maxDimension = msg.maxDimension;
         if (Array.isArray(msg.toolsOrder)) applyToolOrder(msg.toolsOrder);
         if (typeof msg.toolsDock === 'string') setDock(msg.toolsDock);
+        if (typeof msg.pet === 'string') setPet(msg.pet);
         if (typeof msg.tourSeen === 'boolean') {
           state.tourSeen = msg.tourSeen;
           maybeStartTour();
@@ -284,6 +285,7 @@
     attachDropAndPaste();
     attachContextMenu();
     attachTour();
+    attachPet();
 
     window.addEventListener('resize', () => {
       layoutChrome();
@@ -322,6 +324,7 @@
     const css = pad.top + 'px ' + pad.right + 'px ' + pad.bottom + 'px ' + pad.left + 'px';
     document.getElementById('canvas-wrap').style.padding = css;
     document.getElementById('empty-state').style.inset = css;
+    positionPet();
     return pad;
   }
 
@@ -1722,6 +1725,8 @@
     clear: svg('<path d="m7 21-4-4L14 6l4 4L7 21Z"/><path d="M11 21h10"/>'),
     replace: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>'),
     tips: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><path d="M12 17h.01"/>'),
+    paw: svg('<circle cx="7" cy="9" r="1.6"/><circle cx="11" cy="6" r="1.6"/><circle cx="15.5" cy="6.5" r="1.6"/><circle cx="18.5" cy="10.5" r="1.6"/><path d="M8.5 17c0-2.5 2-5 4.5-5s4.5 2.5 4 5c-.3 1.6-1.8 2.3-4 2.3s-4.2-.7-4.5-2.3Z"/>'),
+    hide: svg('<path d="M3 3l18 18"/><path d="M10.6 5.1A9.8 9.8 0 0 1 12 5c5 0 9 5 9 7a10 10 0 0 1-2.3 3.4"/><path d="M6.6 6.6C4.4 8 3 10.5 3 12c0 2 4 7 9 7a9.6 9.6 0 0 0 4.4-1.1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>'),
     compare: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>'),
   };
 
@@ -2090,6 +2095,337 @@
       endTour();
     }, true);
     window.addEventListener('resize', positionTour);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pet (snapmark.pet): a small pixel-art cat or dog that sits by the tool pill
+  // and idles: blinks, swishes or wags its tail, grooms or pants, yawns, looks
+  // around, wanders a little and naps. Poses are drawn from shapes on a 26×24
+  // grid and outlined automatically, so they are parameters rather than
+  // hand-drawn frames. It's DOM, not canvas content, so it never appears in
+  // the copied image.
+  // ---------------------------------------------------------------------------
+
+  const PET_W = 26, PET_H = 24, PET_SCALE = 2;
+  const PET_COLORS = {
+    cat: { fur: '#e9a35a', dark: '#c27432', light: '#f9e2c0', nose: '#f08a9b', line: '#2a1c12' },
+    dog: { fur: '#c8925c', dark: '#7a4a26', light: '#f4e6cc', nose: '#2a1c12', line: '#2a1c12' },
+  };
+  const PET_TONGUE = '#f07c8c', PET_ZZZ = '#d7dbe4', PET_HEART = '#ff6b8b';
+  const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  const pet = {
+    kind: 'off', timer: 0, ctx: null, tick: 0,
+    act: 'sit', actUntil: 0, facing: 1, x: null, target: 0, spot: null,
+    blinkAt: -1e9, heartUntil: 0,
+  };
+
+  // p: { pose: 'sit' | 'stand' | 'lie', swing (tail, -1..1), eyes: 'open' |
+  // 'shut', mouth: 'shut' | 'open' | 'tongue', paw (cat grooming), headDown,
+  // leg (walk phase 0/1), z (0-3 sleep z's), heart }
+  function petSprite(kind, p) {
+    const C = PET_COLORS[kind];
+    const cat = kind === 'cat';
+    const grid = new Array(PET_W * PET_H).fill(null);
+    const set = (x, y, c) => {
+      x = Math.round(x); y = Math.round(y);
+      if (x >= 0 && y >= 0 && x < PET_W && y < PET_H) grid[y * PET_W + x] = c;
+    };
+    const ell = (cx, cy, rx, ry, c) => {
+      for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) {
+        for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+          const dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry;
+          if (dx * dx + dy * dy <= 1) set(x, y, c);
+        }
+      }
+    };
+    const rect = (x0, y0, x1, y1, c) => {
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) set(x, y, c);
+    };
+    const tri = (a, b, d, c) => {
+      const side = (p0, p1, q) => (p1[0] - p0[0]) * (q[1] - p0[1]) - (p1[1] - p0[1]) * (q[0] - p0[0]);
+      for (let y = Math.floor(Math.min(a[1], b[1], d[1])); y <= Math.ceil(Math.max(a[1], b[1], d[1])); y++) {
+        for (let x = Math.floor(Math.min(a[0], b[0], d[0])); x <= Math.ceil(Math.max(a[0], b[0], d[0])); x++) {
+          const q = [x + 0.5, y + 0.5];
+          const s0 = side(a, b, q), s1 = side(b, d, q), s2 = side(d, a, q);
+          if ((s0 >= 0 && s1 >= 0 && s2 >= 0) || (s0 <= 0 && s1 <= 0 && s2 <= 0)) set(x, y, c);
+        }
+      }
+    };
+    const line = (pts, r, c) => {
+      for (let i = 1; i < pts.length; i++) {
+        const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+        const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 2));
+        for (let k = 0; k <= n; k++) ell(x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n, r, r, c);
+      }
+    };
+    const pattern = (x, y, rows, c, target) => rows.forEach((row, j) => {
+      for (let i = 0; i < row.length; i++) {
+        if (row[i] !== '#') continue;
+        const gx = x + i, gy = y + j;
+        if (gx >= 0 && gy >= 0 && gx < PET_W && gy < PET_H) target[gy * PET_W + gx] = c;
+      }
+    });
+    const eyes = (x, y) => {
+      if (p.eyes === 'shut') { set(x - 1, y, C.line); set(x, y, C.line); }
+      else { set(x, y - 1, C.line); set(x, y, C.line); }
+    };
+    const sw = p.swing || 0;
+    let heartAt = [9, 0];
+
+    if (p.pose === 'lie') {
+      if (cat) line([[5, 20], [2, 21], [4, 22], [9, 22]], 1.1, C.fur);
+      else line([[5, 19], [2, 17 + sw]], 1.2, C.fur);
+      ell(11, 19, 7.5, 3.3, C.fur);
+      if (cat) [[8, 16], [10, 16], [12, 16]].forEach(([x, y]) => set(x, y, C.dark));
+      else ell(9, 18, 2, 1.3, C.dark);
+      ell(19.5, 21.5, 2.6, 1.1, C.light);
+      ell(18.5, 17.5, 3.8, 3.3, C.fur);
+      if (cat) {
+        tri([15.5, 15], [16.5, 11.5], [18, 14.5], C.fur);
+        tri([19, 14.3], [20.8, 11.3], [21.6, 15.3], C.fur);
+        ell(20.8, 18.6, 1.6, 1.2, C.light);
+        set(22, 18, C.nose);
+      } else {
+        ell(22, 18.6, 2, 1.5, C.light);
+        set(23, 18, C.nose);
+        ell(16, 18, 1.4, 2.6, C.dark);
+      }
+      set(19, 17, C.line); set(20, 17, C.line);
+      heartAt = [12, 8];
+    } else if (p.pose === 'stand') {
+      [[5, C.dark], [8, C.fur], [15, C.dark], [18, C.fur]].forEach(([x, c], i) => {
+        const o = p.leg ? 1 : -1;
+        const lx = x + (i % 2 ? o : -o);
+        rect(lx, 18, lx + 1, 22, c);
+      });
+      if (cat) line([[5, 15], [2, 12 + sw], [2.5, 8 + sw * 1.5]], 1.1, C.fur);
+      else line([[5, 15], [2.5 + sw * 1.5, 11]], 1.2, C.fur);
+      ell(11.5, 16, 7, 3.4, C.fur);
+      ell(12, 18.4, 4.5, 1.2, C.light);
+      if (cat) {
+        [[9, 13], [11, 13], [13, 13]].forEach(([x, y]) => set(x, y, C.dark));
+        ell(19, 11, 4, 3.6, C.fur);
+        tri([15.8, 9], [16.6, 4.8], [18.6, 8], C.fur);
+        tri([19.6, 8], [21.6, 4.8], [22.4, 9.4], C.fur);
+        ell(21.4, 12.4, 1.6, 1.2, C.light);
+        set(23, 11, C.nose);
+        eyes(20, 11);
+      } else {
+        ell(10, 14.5, 2, 1.3, C.dark);
+        ell(18.5, 11, 3.8, 3.5, C.fur);
+        ell(22.2, 12.4, 2, 1.6, C.light);
+        set(23, 11, C.nose); set(24, 11, C.nose);
+        ell(16.5, 12, 1.4, 2.8, C.dark);
+        eyes(19, 11);
+        if (p.mouth === 'tongue') { set(21, 14, C.line); rect(22, 14, 22, 15, PET_TONGUE); }
+      }
+      heartAt = [10, 1];
+    } else {
+      // Sitting, facing right.
+      if (cat) line([[6, 21], [2.5, 21], [1.5 + sw * 0.8, 17], [2.5 + sw * 1.5, 13.5]], 1.1, C.fur);
+      else line([[6, 18], [3 + sw * 1.8, 13.5]], 1.2, C.fur);
+      ell(9, 19, 5, 3.6, C.fur);
+      ell(11.5, 16, 4.3, 5.2, C.fur);
+      ell(14, 17, 2, 3.8, C.light);
+      if (p.paw) line([[14, 19], [16, 15], [18.5, 13]], 1.2, C.light);
+      else rect(13, 18, 15, 22, C.light);
+      const hy = 9.5 + (p.headDown ? 1 : 0);
+      const r = Math.round(hy);
+      if (cat) {
+        [[7, 17], [8, 15], [10, 12]].forEach(([x, y]) => set(x, y, C.dark));
+        ell(16, hy, 4.3, 3.8, C.fur);
+        tri([12.6, hy - 2], [13.4, hy - 6.3], [15.6, hy - 3], C.fur);
+        tri([16.6, hy - 3], [18.8, hy - 6.3], [19.6, hy - 1.6], C.fur);
+        ell(18.6, hy + 1.6, 1.7, 1.3, C.light);
+        set(20, r, C.nose);
+        eyes(17, r);
+        if (p.mouth === 'open') { rect(18, r + 1, 20, r + 2, C.line); set(19, r + 2, C.nose); }
+        if (p.paw) set(20, r + 1, C.nose);
+      } else {
+        ell(9, 17, 1.8, 1.5, C.dark);
+        ell(15.5, hy - 0.5, 4, 3.9, C.fur);
+        ell(19.4, hy + 1.6, 2, 1.5, C.light);
+        set(20, r, C.nose); set(21, r, C.nose);
+        ell(12.8, hy + 0.5, 1.5, 3, C.dark);
+        eyes(17, r - 1);
+        if (p.mouth === 'tongue') { set(19, r + 2, C.line); rect(19, r + 3, 20, r + 4, PET_TONGUE); }
+        if (p.mouth === 'open') rect(18, r + 2, 20, r + 2, C.line);
+      }
+    }
+
+    // Outline: every empty pixel touching the pet.
+    const out = grid.slice();
+    for (let y = 0; y < PET_H; y++) {
+      for (let x = 0; x < PET_W; x++) {
+        if (grid[y * PET_W + x]) continue;
+        const near = (x > 0 && grid[y * PET_W + x - 1]) || (x < PET_W - 1 && grid[y * PET_W + x + 1]) ||
+          (y > 0 && grid[(y - 1) * PET_W + x]) || (y < PET_H - 1 && grid[(y + 1) * PET_W + x]);
+        if (near) out[y * PET_W + x] = C.line;
+      }
+    }
+    if (p.pose === 'lie' && p.z) {
+      [[12, 9, ['###', '..#', '.#.', '###']], [7, 5, ['####', '..#.', '.#..', '####']], [2, 0, ['####', '..#.', '.#..', '####']]]
+        .slice(0, p.z).forEach(([x, y, rows]) => pattern(x, y, rows, PET_ZZZ, out));
+    }
+    if (p.heart) pattern(heartAt[0], heartAt[1], ['.#.#.', '#####', '#####', '.###.', '..#..'], PET_HEART, out);
+    return out;
+  }
+
+  function setPet(kind) {
+    kind = kind in PET_COLORS ? kind : 'off';
+    if (kind === pet.kind) return;
+    pet.kind = kind;
+    clearInterval(pet.timer);
+    document.getElementById('pet').hidden = kind === 'off';
+    if (kind === 'off') return;
+    startPetAct('sit');
+    positionPet();
+    petTick();
+    pet.timer = setInterval(petTick, 125);
+  }
+
+  function choosePet(kind) {
+    setPet(kind);
+    vscode.postMessage({ type: 'setPet', pet: kind });
+  }
+
+  // Where the pet can be: its feet line `y` and the left edge range it can
+  // walk along. Below the pill when docked left or right (on top of it if
+  // there's no room), beside it when docked at the top or bottom.
+  function petSpot() {
+    const w = PET_W * PET_SCALE, h = PET_H * PET_SCALE, W = window.innerWidth;
+    const t = document.getElementById('tools').getBoundingClientRect();
+    const mid = t.left + t.width / 2 - w / 2;
+    if (state.dock === 'left' || state.dock === 'right') {
+      const left = state.dock === 'left';
+      const stylebarTop = document.getElementById('stylebar').getBoundingClientRect().top;
+      if (stylebarTop - t.bottom >= h + 6) {
+        return { y: t.bottom + 2 + h, home: mid, min: left ? 6 : t.left - 30, max: left ? t.right + 30 - w : W - w - 6 };
+      }
+      if (t.top >= h + 6) return { y: t.top + 1, home: mid, min: t.left - 4, max: t.right + 4 - w };
+      return null;
+    }
+    const limit = state.dock === 'top'
+      ? document.getElementById('commit').getBoundingClientRect().left - 8
+      : W - 8;
+    const max = Math.min(t.right + 6 + 80, limit - w);
+    if (max >= t.right + 6) return { y: t.bottom, home: t.right + 6, min: t.right + 6, max };
+    const min = Math.max(8, t.left - 6 - 80 - w);
+    if (t.left - 6 - w >= min) return { y: t.bottom, home: t.left - 6 - w, min, max: t.left - 6 - w };
+    return null;
+  }
+
+  function positionPet() {
+    if (pet.kind === 'off') return;
+    const el = document.getElementById('pet');
+    const spot = petSpot();
+    pet.spot = spot;
+    el.style.visibility = spot ? '' : 'hidden';
+    if (!spot) return;
+    const x = pet.x === null ? spot.home : pet.x;
+    pet.x = Math.max(spot.min, Math.min(spot.max, x));
+    if (pet.act === 'walk') pet.target = Math.max(spot.min, Math.min(spot.max, pet.target));
+    el.style.left = pet.x + 'px';
+    el.style.top = spot.y - PET_H * PET_SCALE + 'px';
+  }
+
+  const PET_ACTS = {
+    cat: [['walk', 3], ['groom', 3], ['yawn', 1], ['look', 2], ['sleep', 2]],
+    dog: [['walk', 3], ['pant', 3], ['wag', 2], ['look', 2], ['sleep', 2]],
+  };
+
+  function startPetAct(act) {
+    const now = performance.now();
+    pet.act = act;
+    pet.actUntil = now + ({
+      sit: 3000 + Math.random() * 4000, groom: 2600, pant: 3200, wag: 2000, yawn: 1300,
+      look: 1600, sleep: 10000 + Math.random() * 12000, walk: 15000,
+    })[act];
+    if (act === 'look') pet.facing = -pet.facing;
+    if (act === 'walk' && pet.spot) {
+      const { min, max } = pet.spot;
+      pet.target = min + Math.random() * (max - min);
+      pet.facing = pet.target >= pet.x ? 1 : -1;
+    }
+  }
+
+  function nextPetAct() {
+    const canWalk = !REDUCED_MOTION.matches && pet.spot && pet.spot.max - pet.spot.min > 16;
+    const acts = PET_ACTS[pet.kind].filter(([a]) => a !== 'walk' || canWalk);
+    let roll = Math.random() * acts.reduce((n, [, w]) => n + w, 0);
+    for (const [a, w] of acts) { roll -= w; if (roll < 0) return a; }
+    return 'sit';
+  }
+
+  function petTick() {
+    if (document.hidden || pet.kind === 'off') return;
+    const now = performance.now();
+    pet.tick++;
+    if (now >= pet.actUntil) {
+      if (pet.act === 'look') pet.facing = -pet.facing;
+      startPetAct(pet.act === 'sit' ? nextPetAct() : 'sit');
+    }
+    if (pet.act === 'walk') {
+      const step = 2.5;
+      if (Math.abs(pet.target - pet.x) <= step) { pet.x = pet.target; startPetAct('sit'); }
+      else pet.x += Math.sign(pet.target - pet.x) * step;
+      document.getElementById('pet').style.left = pet.x + 'px';
+    }
+    if (pet.act === 'sit' && now - pet.blinkAt > 2000 && Math.random() < 0.04) pet.blinkAt = now;
+
+    const t = pet.tick;
+    const blink = now - pet.blinkAt < 180;
+    const p = { pose: 'sit', swing: Math.sin(t * 0.35) * 0.7, eyes: blink ? 'shut' : 'open', mouth: 'shut', heart: now < pet.heartUntil };
+    if (pet.kind === 'dog') p.swing = Math.sin(t * 0.9) * 0.6;
+    if (pet.act === 'groom') Object.assign(p, { paw: (t >> 1) % 2 === 0, headDown: true, eyes: 'shut' });
+    if (pet.act === 'yawn') Object.assign(p, { mouth: 'open', eyes: 'shut' });
+    if (pet.act === 'pant') Object.assign(p, { mouth: 'tongue', swing: Math.sin(t * 1.6) });
+    if (pet.act === 'wag') p.swing = t % 2 ? 1 : -1;
+    if (pet.act === 'walk') Object.assign(p, { pose: 'stand', leg: t % 2, mouth: pet.kind === 'dog' ? 'tongue' : 'shut' });
+    if (pet.act === 'sleep') Object.assign(p, { pose: 'lie', eyes: 'shut', z: Math.floor(t / 5) % 4, swing: 0 });
+    if (REDUCED_MOTION.matches) p.swing = 0;
+
+    const px = petSprite(pet.kind, p);
+    const ctx = pet.ctx;
+    const s = ctx.canvas.width / PET_W;
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    for (let i = 0; i < px.length; i++) {
+      if (!px[i]) continue;
+      ctx.fillStyle = px[i];
+      ctx.fillRect((i % PET_W) * s, Math.floor(i / PET_W) * s, s, s);
+    }
+    ctx.canvas.style.transform = pet.facing < 0 ? 'scaleX(-1)' : '';
+  }
+
+  function attachPet() {
+    const el = document.getElementById('pet');
+    const cv = el.querySelector('canvas');
+    const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1));
+    cv.width = PET_W * PET_SCALE * dpr;
+    cv.height = PET_H * PET_SCALE * dpr;
+    pet.ctx = cv.getContext('2d');
+    // Click to pet: a hop and a heart; a napping pet wakes up instead.
+    el.addEventListener('click', () => {
+      if (pet.act === 'sleep') { startPetAct('yawn'); return; }
+      pet.heartUntil = performance.now() + 1200;
+      if (pet.kind === 'dog') startPetAct('wag');
+      if (REDUCED_MOTION.matches) return;
+      el.classList.remove('hop');
+      void el.offsetWidth;
+      el.classList.add('hop');
+    });
+    el.addEventListener('animationend', () => el.classList.remove('hop'));
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openMenu([
+        { label: 'Cat', icon: 'paw', checked: pet.kind === 'cat', run: () => choosePet('cat') },
+        { label: 'Dog', icon: 'paw', checked: pet.kind === 'dog', run: () => choosePet('dog') },
+        'sep',
+        { label: 'Hide pet', icon: 'hide', run: () => choosePet('off') },
+      ], { x: e.clientX, y: e.clientY });
+    });
   }
 
   if (document.readyState === 'loading') {
