@@ -595,7 +595,7 @@ button.menu-item[aria-checked="true"] svg { color: var(--gold); opacity: 1; }
 }
 #drop-zones[hidden] { display: none; }
 .drop-zone {
-  width: min(240px, 42vw);
+  width: min(220px, 29vw);
   padding: 28px 16px;
   border-radius: 24px;
   display: flex;

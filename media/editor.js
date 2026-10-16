@@ -27,6 +27,8 @@
     tourSeen: true, // until the extension says otherwise
     sampler: null, // { bg, canvas, ctx } holding the background's pixels
     compare: null, // { w, h } of the original image while a compared one sits beside it
+    images: new Map(), // srcKey -> data URL of images added onto the canvas
+    imageSeq: 0,
   };
 
   const MIN_ZOOM = 0.2;
@@ -551,6 +553,7 @@
   function loadImage(dataUrl) {
     cancelCrop();
     state.compare = null;
+    state.images = new Map(); // history resets below, so nothing refers to them
     setPxScale(detectPixelScale(dataUrl));
     fabric.Image.fromURL(dataUrl, (img) => {
       state.imgW = img.width;
@@ -581,6 +584,7 @@
     const reader = new FileReader();
     reader.onload = () => {
       if (mode === 'compare' && state.imgW) placeBeside(reader.result);
+      else if (mode === 'place' && state.imgW) placeImage(reader.result);
       else loadImage(reader.result);
     };
     reader.readAsDataURL(file);
@@ -654,6 +658,39 @@
       );
     }
     updateHistoryButtons();
+  }
+
+  // Paste (or "Add to canvas") with an image open: the new image goes onto the
+  // canvas as an object, centred in view, at most 60% of the canvas, with a
+  // soft shadow so it reads as separate. Select takes over so it can be moved
+  // and resized at once. Its pixels live in state.images under data.srcKey,
+  // and history entries store only the key.
+  function placeImage(dataUrl) {
+    const c = state.canvas;
+    fabric.Image.fromURL(dataUrl, (img) => {
+      if (!img || !img.width) return;
+      const key = 'img' + ++state.imageSeq;
+      state.images.set(key, dataUrl);
+      const fit = Math.min(1, (state.imgW * 0.6) / img.width, (state.imgH * 0.6) / img.height);
+      const cv = c.upperCanvasEl.getBoundingClientRect();
+      const view = document.getElementById('canvas-wrap').getBoundingClientRect();
+      const s = state.scale * state.zoom;
+      const cx = ((Math.max(cv.left, view.left) + Math.min(cv.right, view.right)) / 2 - cv.left) / s;
+      const cy = ((Math.max(cv.top, view.top) + Math.min(cv.bottom, view.bottom)) / 2 - cv.top) / s;
+      const blur = Math.round(Math.max(state.imgW, state.imgH) / 80);
+      img.set({
+        originX: 'center', originY: 'center',
+        left: Math.max(0, Math.min(state.imgW, cx)), top: Math.max(0, Math.min(state.imgH, cy)),
+        scaleX: fit, scaleY: fit,
+        shadow: new fabric.Shadow({ color: 'rgba(0, 0, 0, 0.35)', blur, offsetY: blur / 3 }),
+        data: { kind: 'image', srcKey: key },
+      });
+      c.add(img);
+      setTool('select');
+      c.setActiveObject(img);
+      c.requestRenderAll();
+      snapshot();
+    });
   }
 
   // Undo a compare: back to the original image (the top-left W×H of the
@@ -730,8 +767,10 @@
         if (it && it.type && it.type.startsWith('image/')) {
           const file = it.getAsFile();
           if (!file) continue;
+          const active = state.canvas.getActiveObject();
+          if (active && active.isEditing) return; // pasting into a text
           e.preventDefault();
-          loadFile(file);
+          loadFile(file, state.imgW ? 'place' : 'replace');
           return;
         }
       }
@@ -1244,6 +1283,8 @@
   function serialize() {
     const json = state.canvas.toJSON(['data']);
     delete json.backgroundImage;
+    // Added images are stored once in state.images; keep only their key here.
+    json.objects.forEach((o) => { if (o.type === 'image' && o.data && o.data.srcKey) o.src = o.data.srcKey; });
     return json;
   }
 
@@ -1278,7 +1319,11 @@
   function restoreFromHistory(json) {
     state.suppressSnapshot = true;
     const bg = state.canvas.backgroundImage;
-    state.canvas.loadFromJSON(json, () => {
+    const withImages = Object.assign({}, json, {
+      objects: json.objects.map((o) => (o.type === 'image' && o.data && o.data.srcKey
+        ? Object.assign({}, o, { src: state.images.get(o.data.srcKey) }) : o)),
+    });
+    state.canvas.loadFromJSON(withImages, () => {
       state.canvas.backgroundImage = bg;
       state.canvas.forEachObject((o) => {
         o.selectable = o.evented = isInteractive(o);
@@ -1736,6 +1781,7 @@
       const items = [
         { label: 'Replace image…', icon: 'replace', run: () => pick('replace') },
         { label: 'Compare with another image…', icon: 'compare', run: () => pick('compare') },
+        { label: 'Add image to canvas…', icon: 'addImage', run: () => pick('place') },
       ];
       if (state.compare) items.push({ label: 'Remove compared image', icon: 'uncompare', run: removeCompare });
       openMenu(items, { anchor: upload, side: 'below', align: 'end' });
@@ -1827,6 +1873,7 @@
     paw: svg('<circle cx="7" cy="9" r="1.6"/><circle cx="11" cy="6" r="1.6"/><circle cx="15.5" cy="6.5" r="1.6"/><circle cx="18.5" cy="10.5" r="1.6"/><path d="M8.5 17c0-2.5 2-5 4.5-5s4.5 2.5 4 5c-.3 1.6-1.8 2.3-4 2.3s-4.2-.7-4.5-2.3Z"/>'),
     hide: svg('<path d="M3 3l18 18"/><path d="M10.6 5.1A9.8 9.8 0 0 1 12 5c5 0 9 5 9 7a10 10 0 0 1-2.3 3.4"/><path d="M6.6 6.6C4.4 8 3 10.5 3 12c0 2 4 7 9 7a9.6 9.6 0 0 0 4.4-1.1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>'),
     uncompare: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/><path d="m15 9 4 6"/><path d="m19 9-4 6"/>'),
+    addImage: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/><path d="M17 3v6"/><path d="M14 6h6"/>'),
     compare: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>'),
   };
 

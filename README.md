@@ -6,7 +6,7 @@ An image editor for annotating screenshots without leaving VS Code. Draw on the 
 
 Copy an image. A pencil lights up in your VS Code status bar. Click it, draw on the screenshot, hit **Copy**. Paste into your chat.
 
-If there is no image on the clipboard, click the pencil anyway. You can drag an image file in, paste one with `Cmd+V`, or pick a file from your computer. To switch to a different image partway through, or to add one to compare against, use **Upload** next to **Copy**, or drop the file onto the editor.
+If there is no image on the clipboard, click the pencil anyway. You can drag an image file in, paste one with `Cmd+V`, or pick a file from your computer. With an image open, `Cmd+V` adds the pasted image on top of it, ready to move and resize. To switch to a different image, add one to compare against, or add one onto the canvas, use **Upload** next to **Copy**, or drop the file onto the editor.
 
 ## Features
 
