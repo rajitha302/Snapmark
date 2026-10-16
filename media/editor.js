@@ -4,7 +4,7 @@
   const vscode = acquireVsCodeApi();
 
   const state = {
-    tool: 'pen',
+    tool: 'comment', // the default tool
     color: '#007aff',
     width: 4,
     canvas: null,
@@ -242,7 +242,7 @@
     state.canvas = new fabric.Canvas(el, {
       preserveObjectStacking: true,
       selection: false,
-      isDrawingMode: true,
+      isDrawingMode: false,
     });
     // Spotlight dimming sits between the screenshot and the annotations, so
     // arrows and labels drawn over it stay bright. Exports render it too.
@@ -286,6 +286,7 @@
     attachContextMenu();
     attachTour();
     attachPet();
+    setTool(state.tool);
 
     window.addEventListener('resize', () => {
       layoutChrome();

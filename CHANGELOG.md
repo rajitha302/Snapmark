@@ -15,7 +15,7 @@
 - Tools can be reordered: drag a tool along the toolbar, or focus it and press Alt+Arrow. The order is saved and survives restarts.
 - The toolbar can be moved: drag its grip (or focus it and use the arrow keys) to dock it on the left, right, top or bottom edge. While dragging, a glowing outline previews exactly where it will land. The position is remembered.
 - The tool you pick stays selected until you close the editor. Text and Comment no longer switch back to Select after each use. With those tools, clicking away finishes what you're typing, clicking an existing text or comment edits or moves it, and Delete removes the selected one.
-- Blue is now the default colour.
+- Blue is now the default colour, and Comment is the tool selected when the editor opens.
 - Right-click menu, styled to match the editor. On an annotation: Edit text, Duplicate, Bring to front, Send to back, Delete. Anywhere: Undo, Redo, Copy image, Download PNG (full resolution, saved where you choose), Fit to window, Clear annotations. While you're typing, the normal text menu still appears.
 - Delete button in the bottom toolbar, active while something is selected.
 - Fixed shapes drawn by dragging (rectangle, ellipse, highlight) being clickable only near the corner where you started drawing.
