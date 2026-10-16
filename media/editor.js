@@ -2115,19 +2115,19 @@
     cat: {
       fur: '#eba25b', hi: '#f9c88c', shade: '#c47334', dark: '#b8652b', far: '#c47235',
       light: '#fbe8ca', lightShade: '#e6c99c', nose: '#f08a9b', ear: '#f4a9b4', eye: '#24170d',
-      mouth: '#8a5236', whisker: '#fff4e4', line: '#5a3216',
+      mouth: '#8a5236', whisker: '#fff4e4', line: '#3e1f0c',
     },
     dog: {
       fur: '#c99460', hi: '#e6bb8a', shade: '#9c6a3a', dark: '#6f4424', far: '#a06c3c',
       light: '#f6eacf', lightShade: '#dcc6a0', nose: '#24170d', ear: '#6f4424', eye: '#24170d',
-      mouth: '#5a3a26', tongueLine: '#c95a6a', collar: '#d9433f', tag: '#f2cf73', line: '#3e2614',
+      mouth: '#5a3a26', tongueLine: '#c95a6a', collar: '#d9433f', tag: '#f2cf73', line: '#2a170b',
     },
   };
   const HOME_COLORS = {
-    cushion: { base: '#5aa6a0', hi: '#8fd0c8', shade: '#3c7c77', tuft: '#2f6662', piping: '#e9cf8a', line: '#1f4645' },
+    cushion: { base: '#5aa6a0', hi: '#8fd0c8', shade: '#3c7c77', tuft: '#2f6662', piping: '#e9cf8a', line: '#143534' },
     house: {
       wall: '#6f9dc6', wallHi: '#9cc3e4', wallShade: '#4f7ca4', plank: '#5a87b0',
-      roof: '#d0533f', roofHi: '#ec7f66', roofShade: '#a23a2b', trim: '#f4e9d2', door: '#1d140c', line: '#25233a',
+      roof: '#d0533f', roofHi: '#ec7f66', roofShade: '#a23a2b', trim: '#f4e9d2', door: '#1d140c', line: '#191828',
     },
   };
   const PET_TONGUE = '#f07c8c', PET_ZZZ = '#d7dbe4', PET_HEART = '#ff6b8b';
@@ -2207,13 +2207,15 @@
           }
         }
       },
-      outline(c) { // every empty pixel touching the shape
+      outline(c) { // every empty pixel touching the shape, diagonals included
         const src = g.slice();
+        const filled = (x, y) => x >= 0 && y >= 0 && x < w && y < h && src[y * w + x];
         for (let y = 0; y < h; y++) {
           for (let x = 0; x < w; x++) {
             if (src[y * w + x]) continue;
-            if ((x > 0 && src[y * w + x - 1]) || (x < w - 1 && src[y * w + x + 1]) ||
-                (y > 0 && src[(y - 1) * w + x]) || (y < h - 1 && src[(y + 1) * w + x])) g[y * w + x] = c;
+            for (let j = -1; j <= 1 && !g[y * w + x]; j++) {
+              for (let i = -1; i <= 1; i++) if ((i || j) && filled(x + i, y + j)) { g[y * w + x] = c; break; }
+            }
           }
         }
       },
@@ -2320,6 +2322,13 @@
         }
       }
     };
+    // A rounded paw centred on design x with its sole on design row y (the
+    // bottom of the row), with two toe lines.
+    const paw = (cx, y, c) => {
+      ell(cx, y - 0.4, 1.5, 0.9, c);
+      const X = Math.round(cx * F), Y = Math.round((y + 1) * F) - 1;
+      [X - 2, X + 1].forEach((x) => { dot(x, Y, C.lightShade); dot(x, Y - 1, C.lightShade); });
+    };
     let heartAt = [9, 0];
 
     if (p.pose === 'lie') {
@@ -2328,7 +2337,7 @@
       ell(11, 19, 7.5, 3.3, C.fur);
       if (cat) [[8, 16], [10, 16], [12, 16]].forEach(([x, y]) => stripe(x, y));
       else ell(9, 18, 2, 1.3, C.dark);
-      ell(19.5, 21.5, 2.6, 1.1, C.light);
+      paw(18.3, 22, C.light); paw(21.3, 22, C.light);
       if (cat) {
         catFace(18.5, 17.2);
       } else {
@@ -2341,16 +2350,22 @@
       const f = p.leg || 0;
       const by = f % 2 ? -1 : 0;
       const spread = [1, 0, -1, 0][f];
-      [[5, C.far], [8, C.fur], [15, C.far], [18, C.fur]].forEach(([x, c], i) => {
-        const lx = x + (i % 2 ? spread : -spread);
-        const lift = (f === 1 && i % 2) || (f === 3 && !(i % 2)) ? 1 : 0;
-        rect(lx, 18 + by, lx + 1, 22 - lift, c);
-        if (cat) rect(lx, 22 - lift, lx + 1, 22 - lift, C.light);
-      });
+      const legs = [[5, C.far], [8, C.fur], [15, C.far], [18, C.fur]].map(([x, c], i) => ({
+        x: x + (i % 2 ? spread : -spread), c, near: i % 2 === 1,
+        lift: (f === 1 && i % 2) || (f === 3 && !(i % 2)) ? 1 : 0,
+      }));
+      const leg = (l) => {
+        rect(l.x, 17 + by, l.x + 1, 21.4 - l.lift, l.c);
+        paw(l.x + 1, 22 - l.lift, l.near ? C.light : C.lightShade);
+      };
+      legs.filter((l) => !l.near).forEach(leg);
       if (cat) line([[5, 15 + by], [2, 12 + sw + by], [2.5, 8 + sw * 1.5 + by]], 1.1, C.fur);
       else line([[5, 15 + by], [2.5 + sw * 1.5, 11 + by]], 1.2, C.fur);
       ell(11.5, 16 + by, 7, 3.4, C.fur);
-      ell(12, 18.4 + by, 4.5, 1.2, C.light);
+      ell(12, 18.2 + by, 4, 1.1, C.light);
+      ell(7, 16.8 + by, 2.8, 2.4, C.fur); // hip
+      ell(17.2, 16.2 + by, 2.4, 2.5, C.fur); // shoulder
+      legs.filter((l) => l.near).forEach(leg);
       if (cat) {
         [[9, 13], [11, 13], [13, 13]].forEach(([x, y]) => stripe(x, y + by));
         ell(19, 11 + by, 4, 3.6, C.fur);
@@ -2380,7 +2395,8 @@
       ell(9, 19, 5, 3.6, C.fur);
       ell(11.5, 16, 4.3, 5.2, C.fur);
       ell(14, 17, 2, 3.8, C.light);
-      if (!p.paw) rect(13, 18, 15, 22, C.light);
+      paw(10.8, 22, C.light);
+      if (!p.paw) { rect(13, 18, 15, 21.4, C.light); paw(14.5, 22, C.light); }
       else if (!cat) line([[14, 19], [16, 15], [18.5, 13]], 1.2, C.light);
       const hy = 9.5 + (p.headDown ? 1 : 0);
       if (cat) {
