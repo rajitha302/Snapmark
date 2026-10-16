@@ -28,7 +28,7 @@
 - New Color picker (`I`): click any pixel to label its hex value (e.g. `#1F6FEB`), with the same magnifier while you aim.
 - New Spotlight (`S`): drag over the part that matters and everything else is dimmed. Annotations stay bright, and several spotlights can overlap.
 - Compare two images: Upload → Compare with another image (or drop a second image onto the "Compare" target) places it beside the current one, labelled "Actual" and "Expected", for "make it look like this" requests. Upload → Replace image works as before.
-- To keep the toolbar compact, related tools share a slot: arrow and two-way arrow, rectangle and ellipse, highlight and spotlight, measure and color picker. The slot shows the last tool used; click it again, or right-click it, to choose another. Shortcuts still select each tool directly.
+- To keep the toolbar compact, related tools share a slot: arrow and two-way arrow, rectangle and ellipse, highlight and spotlight, measure and color picker. The slot shows the last tool used; hover over it to see the others (or click it again, or right-click it). Shortcuts still select each tool directly.
 - Fixed an error logged when VS Code shut the extension down.
 
 ## 1.0.0 — 2026-04-18

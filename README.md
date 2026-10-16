@@ -18,7 +18,7 @@ If there is no image on the clipboard, click the pencil anyway. You can drag an 
 - Pick a color from the screenshot and label its hex value
 - Spotlight an area to dim everything else
 - Compare a screenshot with a design: put a second image beside it, labelled "Actual" and "Expected"
-- Related tools share a toolbar slot. Click the selected slot again to pick another (for example, ellipse instead of rectangle)
+- Related tools share a toolbar slot. Hover over it to pick another (for example, ellipse instead of rectangle)
 - Zoom with `Cmd/Ctrl` + scroll or a trackpad pinch
 - Move the toolbar to any edge by dragging its grip, and drag tools to reorder them. Snapmark remembers both, even after a restart
 - Resize large screenshots automatically on copy

@@ -54,8 +54,7 @@
     const info = TOOL_INFO[tool];
     btn.dataset.tool = tool;
     btn.innerHTML = info.icon;
-    btn.setAttribute('aria-label', info.label);
-    btn.title = info.label + ' (' + info.key + '). Click again for more';
+    btn.setAttribute('aria-label', info.label + ' (' + info.key + ')');
   }
 
   // Figma-style comment: editable text inside a speech bubble whose sharp
@@ -354,6 +353,7 @@
         drag.active = true;
         drag.btn.setPointerCapture(e.pointerId);
         drag.btn.classList.add('reordering');
+        closeMenu(); // a hover flyout would sit over the tools being shuffled
       }
       const over = document.elementFromPoint(e.clientX, e.clientY);
       const target = over && over.closest('#tools button.tool');
@@ -1563,15 +1563,22 @@
   }
 
   function attachToolbarHandlers() {
-    // A grouped slot picks its current tool; clicked again (or right-clicked)
-    // it lists the tools it holds.
+    // A grouped slot lists the tools it holds when hovered (or, without a
+    // mouse, when clicked while active, or right-clicked). A click picks the
+    // tool it shows.
     toolSlots().forEach((btn) => {
       btn.addEventListener('click', () => {
         if (menuOwnerJustClosed(btn)) return;
-        if (btn.dataset.group && state.tool === btn.dataset.tool) openToolFlyout(btn);
-        else setTool(btn.dataset.tool);
+        const open = !document.getElementById('context-menu').hidden && menuState.owner === btn;
+        if (!btn.dataset.group || state.tool !== btn.dataset.tool) setTool(btn.dataset.tool);
+        else if (open) menuState.hover = false; // clicked while hovering: keep it open
+        else openToolFlyout(btn);
       });
       if (btn.dataset.group) {
+        btn.addEventListener('pointerenter', (e) => {
+          if (e.pointerType === 'mouse' && e.buttons === 0) hoverFlyout(btn);
+        });
+        btn.addEventListener('pointerleave', hoverLeave);
         btn.addEventListener('contextmenu', (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -1799,11 +1806,36 @@
   // to an element on side 'right' | 'left' | 'below' | 'above', aligned to its
   // 'start' (default) or 'end'. An anchor element is the menu's owner, so
   // clicking it while the menu is open closes the menu instead of reopening.
-  const menuState = { owner: null, justClosed: null };
+  // hover: the menu is a tool flyout opened by hovering its slot, and closes
+  // when the pointer leaves both.
+  const menuState = { owner: null, justClosed: null, hover: false, openTimer: 0, closeTimer: 0 };
 
   function closeMenu() {
+    clearTimeout(menuState.openTimer);
+    clearTimeout(menuState.closeTimer);
     document.getElementById('context-menu').hidden = true;
     menuState.owner = null;
+    menuState.hover = false;
+  }
+
+  // A short pause before opening, so sweeping across the pill doesn't flash
+  // flyouts; once one is open, moving to the next slot swaps it at once.
+  function hoverFlyout(btn) {
+    clearTimeout(menuState.openTimer);
+    clearTimeout(menuState.closeTimer);
+    const open = !document.getElementById('context-menu').hidden;
+    if (open && menuState.owner === btn) return;
+    if (open && !menuState.hover) return; // leave a clicked-open menu alone
+    const show = () => openToolFlyout(btn, true);
+    if (open) show(); else menuState.openTimer = setTimeout(show, 180);
+  }
+
+  // Grace period to cross the gap between the slot and its flyout.
+  function hoverLeave() {
+    clearTimeout(menuState.openTimer);
+    if (!menuState.hover) return;
+    clearTimeout(menuState.closeTimer);
+    menuState.closeTimer = setTimeout(closeMenu, 280);
   }
 
   function menuOwnerJustClosed(el) {
@@ -1851,22 +1883,23 @@
       }
     }
     menuState.owner = place.anchor || null;
+    menuState.hover = !!place.hover;
     menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + 'px';
     menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + 'px';
     // Focus the menu, not its first item: a focused item draws as
     // highlighted, which looks like a hover on a mouse-opened menu. Arrow
-    // keys move onto the items from here.
-    menu.focus({ preventScroll: true });
+    // keys move onto the items from here. A hover flyout leaves focus alone.
+    if (!place.hover) menu.focus({ preventScroll: true });
   }
 
   // The tools sharing a slot, opened beside the pill on the side facing the
   // canvas.
-  function openToolFlyout(btn) {
+  function openToolFlyout(btn, hover) {
     const side = { left: 'right', right: 'left', top: 'below', bottom: 'above' }[state.dock];
     openMenu(btn.dataset.group.split(' ').map((tool) => {
       const info = TOOL_INFO[tool];
       return { label: info.label, icon: tool, hint: info.key, checked: state.tool === tool, run: () => setTool(tool) };
-    }), { anchor: btn, side });
+    }), { anchor: btn, side, hover });
   }
 
   function attachContextMenu() {
@@ -1892,7 +1925,10 @@
     document.addEventListener('pointerdown', (e) => {
       menuState.justClosed = null;
       if (menu.hidden || menu.contains(e.target)) return;
-      if (menuState.owner && menuState.owner.contains(e.target)) menuState.justClosed = menuState.owner;
+      if (menuState.owner && menuState.owner.contains(e.target)) {
+        if (menuState.hover) return; // the click picks the slot's tool
+        menuState.justClosed = menuState.owner;
+      }
       closeMenu();
     }, true);
     // Capture phase, so Escape closes the menu instead of the editor.
@@ -1912,6 +1948,8 @@
       e.preventDefault();
       e.stopPropagation();
     }, true);
+    menu.addEventListener('pointerenter', () => clearTimeout(menuState.closeTimer));
+    menu.addEventListener('pointerleave', hoverLeave);
     window.addEventListener('blur', closeMenu);
     window.addEventListener('resize', closeMenu);
     wrap.addEventListener('scroll', closeMenu);
