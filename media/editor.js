@@ -2564,8 +2564,6 @@
     if (!pet.queue.length) pet.queue = planPet(now);
     const s = pet.queue.shift();
     pet.step = s;
-    const el = document.getElementById('pet');
-    el.style.pointerEvents = '';
     if (s.at !== undefined) {
       pet.x = s.at;
       placePet();
@@ -2574,7 +2572,6 @@
     } else if (s.walk !== undefined) {
       pet.act = 'walk';
       pet.walkStart = now;
-      el.style.pointerEvents = 'none'; // never in the way of drawing
       const to = s.walk === 'home' ? pet.home : s.walk;
       if (to !== pet.x) pet.facing = to > pet.x ? 1 : -1;
     } else if (s.away) {
@@ -2638,15 +2635,35 @@
     cv.width = PET_W * dpr;
     cv.height = PET_H * dpr;
     pet.ctx = cv.getContext('2d');
-    // Click to pet: a hop and a heart (and a wag); a napping pet wakes up.
+    // Click to pet: a hop and a heart. A napping pet wakes up instead. Now
+    // and then a sitting pet takes that as a cue for a little stroll, and a
+    // walking one stops to say hello before heading home.
     el.addEventListener('click', () => {
+      const now = performance.now();
       if (pet.act === 'sleep') {
         pet.queue.unshift({ act: 'yawn' });
         pet.stepUntil = 0;
         return;
       }
-      pet.heartUntil = performance.now() + 1200;
-      if (pet.kind === 'dog' && pet.act === 'sit') { pet.queue.unshift({ act: 'wag' }); pet.stepUntil = 0; }
+      pet.heartUntil = now + 1200;
+      const walk = (to) => ({ walk: to, speed: rand(30, 52) });
+      if (pet.act === 'walk') {
+        if (Math.random() < 0.4) {
+          pet.queue = [{ act: 'sit', ms: rand(2500, 6000) }, walk('home')];
+          nextPetStep(now);
+        }
+      } else if (!REDUCED_MOTION.matches && Math.random() < 0.3) {
+        const W = window.innerWidth;
+        const roomRight = W - PET_W - 16 - pet.x, roomLeft = pet.x - 8;
+        const dir = roomRight >= roomLeft ? 1 : -1;
+        const to = pet.x + dir * rand(60, Math.max(70, (dir > 0 ? roomRight : roomLeft) * 0.6));
+        pet.queue = [walk(to), { act: 'sit', ms: rand(1500, 4000) }, walk('home')];
+        pet.nextOuting = now + rand(60000, 150000);
+        nextPetStep(now);
+      } else if (pet.kind === 'dog' && pet.act === 'sit') {
+        pet.queue.unshift({ act: 'wag' });
+        pet.stepUntil = 0;
+      }
       if (REDUCED_MOTION.matches) return;
       el.classList.remove('hop');
       void el.offsetWidth;
