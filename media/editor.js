@@ -2350,24 +2350,26 @@
       // back planted; the body bobs up as the legs pass under it.
       const phase = ((p.leg || 0) / 8) * Math.PI * 2;
       const by = -0.5 * Math.round(Math.abs(Math.cos(phase)));
-      const legs = [[5, C.far, 0], [8, C.fur, Math.PI], [15, C.far, Math.PI], [18, C.fur, 0]].map(([x, c, off], i) => ({
-        x: x + Math.round(Math.sin(phase + off) * 2.2) / 2, c, near: i % 2 === 1,
+      // Each leg pivots at a fixed hip or shoulder joint inside the body and
+      // only the foot swings, so a leg is never pulled away from the body.
+      const legs = [[6, C.far, 0], [8.8, C.fur, Math.PI], [15.2, C.far, Math.PI], [17.6, C.fur, 0]].map(([jx, c, off], i) => ({
+        jx, c, near: i % 2 === 1,
+        dx: Math.round(Math.sin(phase + off) * 2.2) / 2,
         lift: Math.round(Math.max(0, Math.cos(phase + off)) * 2) / 2,
       }));
-      // Rounded legs that widen into the body at the top, so there's no
-      // corner for the belly's shading and outline to cut across.
       const leg = (l) => {
-        ell(l.x + 1, 18.4 + by, 1.7, 1.6, l.c);
-        line([[l.x + 1, 18 + by], [l.x + 1, 21.2 - l.lift]], 1.05, l.c);
-        paw(l.x + 1, 22 - l.lift, l.near ? C.light : C.lightShade);
+        const fx = l.jx + l.dx;
+        ell(l.jx, 17.4 + by, 1.8, 1.9, l.c);
+        line([[l.jx, 17.6 + by], [(l.jx + fx) / 2, 19.6 - l.lift / 2], [fx, 21.2 - l.lift]], 1.05, l.c);
+        paw(fx, 22 - l.lift, l.near ? C.light : C.lightShade);
       };
       legs.filter((l) => !l.near).forEach(leg);
       if (cat) line([[5, 15 + by], [2, 12 + sw + by], [2.5, 8 + sw * 1.5 + by]], 1.1, C.fur);
       else line([[5, 15 + by], [2.5 + sw * 1.5, 11 + by]], 1.2, C.fur);
       ell(11.5, 16 + by, 7, 3.4, C.fur);
       ell(12, 18.2 + by, 4, 1.1, C.light);
-      ell(7, 16.8 + by, 2.8, 2.4, C.fur); // hip
-      ell(17.2, 16.2 + by, 2.4, 2.5, C.fur); // shoulder
+      ell(7, 16.6 + by, 2.9, 2.5, C.fur); // haunch
+      ell(17, 15.8 + by, 2.9, 2.8, C.fur); // chest and shoulder, up to the neck
       legs.filter((l) => l.near).forEach(leg);
       if (cat) {
         [[9, 13], [11, 13], [13, 13]].forEach(([x, y]) => stripe(x, y + by));
