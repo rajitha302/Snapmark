@@ -31,6 +31,11 @@
   // Figma-style comment: editable text inside a speech bubble whose sharp
   // corner (`tail`: 'bl' | 'br' | 'tl' | 'tr') sits on the clicked point. The
   // origin is that corner, so the bubble grows away from the point as you type.
+  // While the text is empty the bubble is sized to, and shows, a dimmed
+  // placeholder; empty bubbles are removed when editing ends.
+  const COMMENT_PLACEHOLDER = 'Comment';
+  const measureCtx = document.createElement('canvas').getContext('2d');
+
   fabric.CommentBubble = fabric.util.createClass(fabric.IText, {
     type: 'commentBubble',
     objectCaching: false, // the bubble is drawn outside the text's own bounds
@@ -42,6 +47,26 @@
 
     toObject: function (props) {
       return this.callSuper('toObject', ['tail'].concat(props || []));
+    },
+
+    calcTextWidth: function () {
+      if (this.text) return this.callSuper('calcTextWidth');
+      measureCtx.font = this._getFontDeclaration();
+      return measureCtx.measureText(COMMENT_PLACEHOLDER).width;
+    },
+
+    _render: function (ctx) {
+      this.callSuper('_render', ctx);
+      if (this.text) return;
+      // Same baseline fabric uses for the first line of real text.
+      const baseline = -this.height / 2 + this.fontSize * this._fontSizeMult * (1 - this._fontSizeFraction);
+      ctx.save();
+      ctx.font = this._getFontDeclaration();
+      ctx.fillStyle = this.fill;
+      ctx.globalAlpha *= 0.55;
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(COMMENT_PLACEHOLDER, -this.width / 2, baseline);
+      ctx.restore();
     },
 
     _renderBackground: function (ctx) {
@@ -550,8 +575,10 @@
 
     c.on('object:modified', () => snapshot());
 
-    // A comment left empty after editing is a misclick; drop it. Deferred
-    // because fabric still uses obj.canvas after firing this event.
+    // A comment that ends editing with no text is dismissed. Deferred because
+    // fabric still uses obj.canvas after firing this event. A new comment is
+    // only recorded in history once it has text, so dismissing one leaves
+    // history unchanged (snapshot() skips the identical state).
     c.on('text:editing:exited', (e) => {
       const t = e.target;
       if (!t || t.type !== 'commentBubble' || t.text.trim()) return;
@@ -599,7 +626,10 @@
 
   function snapshot() {
     if (state.suppressSnapshot) return;
-    state.history.push(serialize());
+    const json = serialize();
+    const last = state.history[state.history.length - 1];
+    if (last && JSON.stringify(last) === JSON.stringify(json)) return;
+    state.history.push(json);
     if (state.history.length > state.maxHistory + 1) state.history.shift();
     state.redoStack = [];
     updateHistoryButtons();
@@ -800,7 +830,7 @@
     // so the bubble grows into the image instead of off it.
     const vertical = y < state.imgH * 0.25 ? 't' : 'b';
     const horizontal = x > state.imgW * 0.6 ? 'r' : 'l';
-    const bubble = new fabric.CommentBubble('Comment', {
+    const bubble = new fabric.CommentBubble('', {
       tail: vertical + horizontal,
       originX: horizontal === 'l' ? 'left' : 'right',
       originY: vertical === 'b' ? 'bottom' : 'top',
@@ -819,8 +849,8 @@
     c.add(bubble);
     c.setActiveObject(bubble);
     bubble.enterEditing();
-    bubble.selectAll();
-    snapshot();
+    // No snapshot yet: it is recorded once it has text (object:modified on
+    // exit), and dismissed if it never gets any.
   }
 
   function reseedNumberCounter() {
@@ -837,6 +867,11 @@
     const c = state.canvas;
     cancelCrop();
     c.discardActiveObject();
+    // The editing-exited handler removes empty comments a tick later; export
+    // now, so drop them here or the placeholder bubble would be copied.
+    c.getObjects()
+      .filter((o) => o.type === 'commentBubble' && !o.text.trim())
+      .forEach((o) => c.remove(o));
     c.requestRenderAll();
     const longEdge = Math.max(state.imgW, state.imgH);
     const multiplier = state.maxDimension > 0 && longEdge > state.maxDimension
