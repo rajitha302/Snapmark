@@ -125,8 +125,8 @@
     return fabric.Object._fromObject('CommentBubble', Object.assign({}, object, { styles }), callback, 'text');
   };
 
-  // Compare labels ("ACTUAL" / "EXPECTED"): an editable tag in a solid pill
-  // with a white rim, so they don't read as comments. Origin is the top-left
+  // Compare labels ("Actual" / "Expected"): an editable tag in a neutral pill
+  // with a thin rim, so they don't read as comments. Origin is the top-left
   // corner; the pill extends one padding past the text on every side.
   fabric.TagLabel = fabric.util.createClass(fabric.IText, {
     type: 'tagLabel',
@@ -150,8 +150,8 @@
       ctx.fillStyle = this.backgroundColor;
       ctx.fill();
       ctx.shadowColor = 'transparent';
-      ctx.lineWidth = Math.max(2, this.fontSize * 0.09);
-      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = Math.max(1.5, this.fontSize * 0.06);
+      ctx.strokeStyle = isLightColor(this.backgroundColor) ? 'rgba(0, 0, 0, 0.18)' : 'rgba(255, 255, 255, 0.85)';
       ctx.stroke();
       ctx.restore();
     },
@@ -162,7 +162,7 @@
     return fabric.Object._fromObject('TagLabel', Object.assign({}, object, { styles }), callback, 'text');
   };
 
-  const TAG_ACTUAL = '#d93a3f', TAG_EXPECTED = '#16834a';
+  const TAG_COLOR = '#2c2c2e'; // neutral; recolour with a swatch
 
   // Dimension line: end ticks plus a pill with the length in CSS pixels
   // (screenshot pixels / state.pxScale), so "16 px" on a Retina screenshot
@@ -623,7 +623,7 @@
           const m = Math.round(gap * 0.75);
           // Big enough to read once Copy scales the pair down.
           const fs = Math.max(commentFontSize(state.width), Math.round(Math.max(W, H) / 48));
-          [makeTag(m, m, 'ACTUAL', TAG_ACTUAL, fs), makeTag(x2 + m, y2 + m, 'EXPECTED', TAG_EXPECTED, fs)].forEach((label) => {
+          [makeTag(m, m, 'Actual', TAG_COLOR, fs), makeTag(x2 + m, y2 + m, 'Expected', TAG_COLOR, fs)].forEach((label) => {
             label.selectable = label.evented = isInteractive(label);
             c.add(label);
           });
@@ -1427,7 +1427,7 @@
     const pad = Math.round(fontSize * 0.5);
     return new fabric.TagLabel(text, {
       left: x + pad * 1.2, top: y + pad * 0.8,
-      fontSize, fontWeight: '700', charSpacing: 80,
+      fontSize, fontWeight: '600', charSpacing: 10,
       fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
       fill: '#ffffff', backgroundColor: color,
       data: { kind: 'tag' },
