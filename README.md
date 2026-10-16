@@ -10,7 +10,7 @@ If there is no image on the clipboard, click the pencil anyway. You can drag an 
 
 ## Features
 
-- Redact sensitive areas (API keys, names, anything you don't want in the image)
+- Redact sensitive areas with a solid block (API keys, names, anything you don't want in the image)
 - Drop numbered step markers onto UI flows
 - Pen, arrow, rectangle, ellipse, text, highlight, crop
 - Zoom with `Cmd/Ctrl` + scroll or a trackpad pinch
@@ -19,9 +19,13 @@ If there is no image on the clipboard, click the pencil anyway. You can drag an 
 
 ## Install
 
+Search for **Snapmark** in the VS Code Extensions view, or run:
+
 ```bash
-code --install-extension snapmark-1.0.0.vsix
+code --install-extension RajithaDisanayaka.snapmark
 ```
+
+To install a downloaded build instead, use `code --install-extension snapmark-1.0.1.vsix`.
 
 Linux users need `xclip` (X11) or `wl-clipboard` (Wayland). macOS and Windows work as-is.
 
@@ -40,6 +44,8 @@ Linux users need `xclip` (X11) or `wl-clipboard` (Wayland). macOS and Windows wo
 | `P` | Pen |
 | `A` | Arrow |
 | `R` | Rectangle |
+| `E` | Ellipse |
+| `H` | Highlight |
 | `T` | Text |
 | `C` | Crop |
 | `B` | Redact |

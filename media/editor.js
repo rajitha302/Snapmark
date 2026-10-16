@@ -80,7 +80,7 @@
         { originX: 'left', originY: 'top' }
       );
       applyFitScale();
-      state.history = [state.canvas.toJSON(['data'])];
+      state.history = [serialize()];
       state.redoStack = [];
       state.numberCounter = 1;
       state.zoom = 1;
@@ -359,28 +359,22 @@
           c.remove(s); state.currentShape = null; return;
         }
       } else if (state.tool === 'crop') {
-        if (s.width < 8 || s.height < 8) {
+        const r = clampToImage(s);
+        if (r.width < 8 || r.height < 8) {
           c.remove(s); state.currentShape = null; return;
         }
-        s.set({ left: Math.max(0, s.left), top: Math.max(0, s.top) });
-        s.set({
-          width: Math.min(s.width, state.imgW - s.left),
-          height: Math.min(s.height, state.imgH - s.top),
-        });
+        s.set(r);
         state.pendingCrop = s;
         state.currentShape = null;
         c.requestRenderAll();
         showCropActions();
         return;
       } else if (state.tool === 'redact') {
-        const left = Math.max(0, Math.round(s.left));
-        const top = Math.max(0, Math.round(s.top));
-        const width = Math.round(Math.min(s.width, state.imgW - left));
-        const height = Math.round(Math.min(s.height, state.imgH - top));
+        const r = clampToImage(s);
         c.remove(s);
         state.currentShape = null;
-        if (width < 6 || height < 6) return;
-        applyRedaction(left, top, width, height);
+        if (r.width < 6 || r.height < 6) return;
+        applyRedaction(r.left, r.top, r.width, r.height);
         return;
       } else if (state.tool === 'ellipse') {
         if (s.rx < 2 || s.ry < 2) {
@@ -420,9 +414,28 @@
            ' M ' + hx1 + ' ' + hy1 + ' L ' + x2 + ' ' + y2 + ' L ' + hx2 + ' ' + hy2;
   }
 
+  // Clamp a drag rectangle to the image on all four edges, so dragging past
+  // the top/left edge doesn't push the region past the drawn bottom/right.
+  function clampToImage(s) {
+    const left = Math.max(0, Math.round(s.left));
+    const top = Math.max(0, Math.round(s.top));
+    const right = Math.min(state.imgW, Math.round(s.left + s.width));
+    const bottom = Math.min(state.imgH, Math.round(s.top + s.height));
+    return { left, top, width: right - left, height: bottom - top };
+  }
+
+  // History entries omit the background image: it only changes on load/crop,
+  // which reset history, and serializing it would copy the full screenshot
+  // as base64 into every entry.
+  function serialize() {
+    const json = state.canvas.toJSON(['data']);
+    delete json.backgroundImage;
+    return json;
+  }
+
   function snapshot() {
     if (state.suppressSnapshot) return;
-    state.history.push(state.canvas.toJSON(['data']));
+    state.history.push(serialize());
     if (state.history.length > state.maxHistory + 1) state.history.shift();
     state.redoStack = [];
     updateHistoryButtons();
@@ -447,7 +460,9 @@
 
   function restoreFromHistory(json) {
     state.suppressSnapshot = true;
+    const bg = state.canvas.backgroundImage;
     state.canvas.loadFromJSON(json, () => {
+      state.canvas.backgroundImage = bg;
       state.canvas.forEachObject((o) => {
         o.selectable = state.tool === 'select';
         o.evented = state.tool === 'select';
@@ -542,7 +557,7 @@
       c.setBackgroundImage(newBg, () => {
         applyFitScale();
         c.requestRenderAll();
-        state.history = [c.toJSON(['data'])];
+        state.history = [serialize()];
         state.redoStack = [];
         reseedNumberCounter();
         updateHistoryButtons();
@@ -560,35 +575,20 @@
     hideCropActions();
   }
 
+  // Solid fill, not pixelation: pixelated text can be recovered (e.g. Depix),
+  // and an opaque block also covers annotations drawn underneath.
   function applyRedaction(left, top, width, height) {
     const c = state.canvas;
-    const bgEl = c.backgroundImage && c.backgroundImage.getElement();
-    if (!bgEl) return;
-
-    const blockSize = Math.max(6, Math.round(Math.min(width, height) / 20));
-    const smallW = Math.max(1, Math.round(width / blockSize));
-    const smallH = Math.max(1, Math.round(height / blockSize));
-
-    const tmp = document.createElement('canvas');
-    tmp.width = width;
-    tmp.height = height;
-    const ctx = tmp.getContext('2d');
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(bgEl, left, top, width, height, 0, 0, smallW, smallH);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(tmp, 0, 0, smallW, smallH, 0, 0, width, height);
-
-    fabric.Image.fromURL(tmp.toDataURL('image/png'), (img) => {
-      img.set({
-        left, top,
-        selectable: state.tool === 'select',
-        evented: state.tool === 'select',
-        data: { kind: 'redact' },
-      });
-      c.add(img);
-      c.requestRenderAll();
-      snapshot();
+    const rect = new fabric.Rect({
+      left, top, width, height,
+      fill: '#111111', stroke: null, strokeWidth: 0,
+      selectable: state.tool === 'select',
+      evented: state.tool === 'select',
+      data: { kind: 'redact' },
     });
+    c.add(rect);
+    c.requestRenderAll();
+    snapshot();
   }
 
   function placeNumberMarker(x, y) {
@@ -632,6 +632,7 @@
   }
 
   function done() {
+    if (!state.imgW) return;
     const c = state.canvas;
     cancelCrop();
     c.discardActiveObject();
@@ -704,6 +705,8 @@
       else if (k === 'p' || k === 'P') setTool('pen');
       else if (k === 'a' || k === 'A') setTool('arrow');
       else if (k === 'r' || k === 'R') setTool('rect');
+      else if (k === 'e' || k === 'E') setTool('ellipse');
+      else if (k === 'h' || k === 'H') setTool('highlight');
       else if (k === 't' || k === 'T') setTool('text');
       else if (k === 'c' || k === 'C') setTool('crop');
       else if (k === 'b' || k === 'B') setTool('redact');

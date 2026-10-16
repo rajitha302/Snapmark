@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.1 — 2026-10-16
+
+- Redact now covers the area with a solid block. Pixelated text can sometimes be reconstructed, so pixelation was not a safe way to hide secrets.
+- Crop and redact no longer extend past the area you drew when you drag beyond the image edge.
+- Pressing the annotate shortcut while the editor is open no longer discards your annotations. It only loads a new image if you copied one since.
+- Undo history no longer stores a copy of the screenshot per step, which cut memory use and made undo faster on large images.
+- `Cmd/Ctrl + Enter` with no image loaded no longer overwrites your clipboard with a blank image.
+- Windows: clipboard detection uses one background PowerShell process instead of starting a new one every 2.5 seconds.
+- Linux: clipboard tool detection no longer runs on every poll.
+- New shortcuts: `E` for ellipse, `H` for highlight.
+
 ## 1.0.0 — 2026-04-18
 
 First release.

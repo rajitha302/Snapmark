@@ -2,7 +2,7 @@
   "name": "snapmark",
   "displayName": "Snapmark",
   "description": "Annotate screenshots on your clipboard before pasting them into AI chats like Claude, Copilot, and Cursor. Redact sensitive parts, add numbered steps, and resize large images automatically.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "RajithaDisanayaka",
   "license": "MIT",
   "icon": "media/Logo.png",
@@ -61,7 +61,7 @@
         "snapmark.clipboardDetection": {
           "type": "boolean",
           "default": true,
-          "description": "Watch the clipboard while VS Code is focused and highlight the Snapmark status-bar item when a screenshot is detected."
+          "description": "Watch the clipboard and highlight the Snapmark status-bar item when a new screenshot is detected."
         },
         "snapmark.maxDimension": {
           "type": "number",
