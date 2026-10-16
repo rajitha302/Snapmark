@@ -2334,7 +2334,7 @@
     if (p.pose === 'lie') {
       if (cat) line([[5, 20], [2, 21], [4, 22], [9, 22]], 1.1, C.fur);
       else line([[5, 19], [2, 17 + sw]], 1.2, C.fur);
-      ell(11, 19, 7.5, 3.3, C.fur);
+      ell(11, 19 - (p.breath ? 0.25 : 0), 7.5, 3.3 + (p.breath ? 0.3 : 0), C.fur);
       if (cat) [[8, 16], [10, 16], [12, 16]].forEach(([x, y]) => stripe(x, y));
       else ell(9, 18, 2, 1.3, C.dark);
       paw(18.3, 22, C.light); paw(21.3, 22, C.light);
@@ -2345,17 +2345,20 @@
       }
       heartAt = [12, 8];
     } else if (p.pose === 'stand') {
-      // Walk cycle: 0 and 2 are contact frames (legs apart), 1 and 3 passing
-      // frames (legs together, body up a unit, the swinging pair lifted).
-      const f = p.leg || 0;
-      const by = f % 2 ? -1 : 0;
-      const spread = [1, 0, -1, 0][f];
-      const legs = [[5, C.far], [8, C.fur], [15, C.far], [18, C.fur]].map(([x, c], i) => ({
-        x: x + (i % 2 ? spread : -spread), c, near: i % 2 === 1,
-        lift: (f === 1 && i % 2) || (f === 3 && !(i % 2)) ? 1 : 0,
+      // Walk cycle: 8 frames of a diagonal gait (far back with near front,
+      // near back with far front). Each leg swings forward lifted and pushes
+      // back planted; the body bobs up as the legs pass under it.
+      const phase = ((p.leg || 0) / 8) * Math.PI * 2;
+      const by = -0.5 * Math.round(Math.abs(Math.cos(phase)));
+      const legs = [[5, C.far, 0], [8, C.fur, Math.PI], [15, C.far, Math.PI], [18, C.fur, 0]].map(([x, c, off], i) => ({
+        x: x + Math.round(Math.sin(phase + off) * 2.2) / 2, c, near: i % 2 === 1,
+        lift: Math.round(Math.max(0, Math.cos(phase + off)) * 2) / 2,
       }));
+      // Rounded legs that widen into the body at the top, so there's no
+      // corner for the belly's shading and outline to cut across.
       const leg = (l) => {
-        rect(l.x, 17 + by, l.x + 1, 21.4 - l.lift, l.c);
+        ell(l.x + 1, 18.4 + by, 1.7, 1.6, l.c);
+        line([[l.x + 1, 18 + by], [l.x + 1, 21.2 - l.lift]], 1.05, l.c);
         paw(l.x + 1, 22 - l.lift, l.near ? C.light : C.lightShade);
       };
       legs.filter((l) => !l.near).forEach(leg);
@@ -2393,12 +2396,12 @@
       if (cat) line([[6, 21], [2.5, 21], [1.5 + sw * 0.8, 17], [2.5 + sw * 1.5, 13.5]], 1.1, C.fur);
       else line([[6, 18], [3 + sw * 1.8, 13.5]], 1.2, C.fur);
       ell(9, 19, 5, 3.6, C.fur);
-      ell(11.5, 16, 4.3, 5.2, C.fur);
+      ell(11.5, 16 - (p.breath ? 0.25 : 0), 4.3, 5.2 + (p.breath ? 0.25 : 0), C.fur);
       ell(14, 17, 2, 3.8, C.light);
       paw(10.8, 22, C.light);
       if (!p.paw) { rect(13, 18, 15, 21.4, C.light); paw(14.5, 22, C.light); }
       else if (!cat) line([[14, 19], [16, 15], [18.5, 13]], 1.2, C.light);
-      const hy = 9.5 + (p.headDown ? 1 : 0);
+      const hy = 9.5 + (p.headDown ? 1 : 0) - (p.breath ? 0.5 : 0);
       if (cat) {
         [[7, 17], [8, 15], [10, 12]].forEach(([x, y]) => stripe(x, y));
         catFace(15.5, hy);
@@ -2633,8 +2636,13 @@
     if (pet.act === 'yawn') Object.assign(p, { mouth: 'open', eyes: 'shut' });
     if (pet.act === 'pant') Object.assign(p, { mouth: 'tongue', swing: q(Math.sin(t * 1.6)) });
     if (pet.act === 'wag') p.swing = Math.floor(t) % 2 ? 1 : -1;
-    if (pet.act === 'walk') Object.assign(p, { pose: 'stand', leg: Math.floor(pet.walked / 5) % 4, mouth: pet.kind === 'dog' ? 'tongue' : 'shut' });
+    if (pet.act === 'walk') {
+      const leg = Math.floor(pet.walked / 2.5) % 8;
+      Object.assign(p, { pose: 'stand', leg, swing: q(Math.sin((leg / 8) * Math.PI * 2) * 0.5), mouth: pet.kind === 'dog' ? 'tongue' : 'shut' });
+    }
     if (pet.act === 'sleep') Object.assign(p, { pose: 'lie', eyes: 'shut', z: Math.floor(t / 5) % 4, swing: 0 });
+    // Slow breathing at rest: in for ~1.6s, out for ~1.6s (slower asleep).
+    if (pet.act !== 'walk' && !REDUCED_MOTION.matches) p.breath = Math.sin(now / (pet.act === 'sleep' ? 700 : 520)) > 0.3;
     if (REDUCED_MOTION.matches) p.swing = 0;
 
     const key = JSON.stringify(p) + pet.facing;
