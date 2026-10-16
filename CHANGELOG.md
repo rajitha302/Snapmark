@@ -31,7 +31,7 @@
 - To keep the toolbar compact, related tools share a slot: arrow and two-way arrow, rectangle and ellipse, highlight and spotlight. The slot shows the last tool used; hover over it to see the others (or click it again, or right-click it). Shortcuts still select each tool directly.
 - First-run tips: the first time you open the editor, four short tips point at the toolbar, the style bar, the right-click menu and Copy. Skip them at any point (or press Esc); right-click → Show tips brings them back.
 - Fixed an error logged when VS Code shut the extension down.
-- Renamed to "SnapMark - Image Editor" in the Extensions view and Marketplace. The extension ID (`RajithaDisanayaka.snapmark`) is unchanged, so existing installs update normally.
+- Renamed to "SnapMark - Image Editor & Annotator" in the Extensions view and Marketplace. The extension ID (`RajithaDisanayaka.snapmark`) is unchanged, so existing installs update normally.
 
 ## 1.0.0 — 2026-04-18
 

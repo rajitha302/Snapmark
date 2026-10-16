@@ -1,6 +1,6 @@
 {
   "name": "snapmark",
-  "displayName": "SnapMark - Image Editor",
+  "displayName": "SnapMark - Image Editor & Annotator",
   "description": "Image editor for annotating screenshots in VS Code. Draw arrows and shapes, highlight, redact, crop, measure and add comments, then paste into Claude, Copilot, Cursor or any AI chat.",
   "version": "1.0.1",
   "publisher": "RajithaDisanayaka",
