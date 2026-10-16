@@ -42,8 +42,8 @@ html, body {
   /* The glow sits over the checkerboard, lowest at the bottom right like the
      site's hero, with a fainter wash from the top. */
   background-image:
-    radial-gradient(70% 65% at 85% 95%, rgba(212, 175, 55, 0.3), transparent 70%),
-    radial-gradient(ellipse at top, rgba(236, 220, 178, 0.08), transparent 60%),
+    radial-gradient(70% 65% at 85% 95%, rgba(212, 175, 55, 0.12), transparent 70%),
+    radial-gradient(ellipse at top, rgba(236, 220, 178, 0.04), transparent 60%),
     linear-gradient(45deg, var(--stage-check) 25%, transparent 25%),
     linear-gradient(-45deg, var(--stage-check) 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, var(--stage-check) 75%),
