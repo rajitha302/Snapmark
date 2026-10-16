@@ -125,6 +125,45 @@
     return fabric.Object._fromObject('CommentBubble', Object.assign({}, object, { styles }), callback, 'text');
   };
 
+  // Compare labels ("ACTUAL" / "EXPECTED"): an editable tag in a solid pill
+  // with a white rim, so they don't read as comments. Origin is the top-left
+  // corner; the pill extends one padding past the text on every side.
+  fabric.TagLabel = fabric.util.createClass(fabric.IText, {
+    type: 'tagLabel',
+    objectCaching: false, // the pill is drawn outside the text's own bounds
+
+    initialize: function (text, options) {
+      this.callSuper('initialize', text, options);
+      this.padding = Math.round(this.fontSize * 0.5);
+    },
+
+    _renderBackground: function (ctx) {
+      const pad = this.padding;
+      const w = this.width + pad * 2.4;
+      const h = this.height + pad * 1.6;
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(-w / 2, -h / 2, w, h, h / 2);
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+      ctx.shadowBlur = pad;
+      ctx.shadowOffsetY = pad * 0.25;
+      ctx.fillStyle = this.backgroundColor;
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.lineWidth = Math.max(2, this.fontSize * 0.09);
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+      ctx.restore();
+    },
+  });
+
+  fabric.TagLabel.fromObject = function (object, callback) {
+    const styles = fabric.util.stylesFromArray(object.styles, object.text);
+    return fabric.Object._fromObject('TagLabel', Object.assign({}, object, { styles }), callback, 'text');
+  };
+
+  const TAG_ACTUAL = '#d93a3f', TAG_EXPECTED = '#16834a';
+
   // Dimension line: end ticks plus a pill with the length in CSS pixels
   // (screenshot pixels / state.pxScale), so "16 px" on a Retina screenshot
   // means 16 CSS px. The label reads state.pxScale at render time, so
@@ -583,8 +622,8 @@
           state.redoStack = [];
           const m = Math.round(gap * 0.75);
           // Big enough to read once Copy scales the pair down.
-          const fs = Math.max(commentFontSize(state.width), Math.round(Math.max(W, H) / 60));
-          [makeComment(m, m, 'Actual', 'tl', fs), makeComment(x2 + m, y2 + m, 'Expected', 'tl', fs)].forEach((label) => {
+          const fs = Math.max(commentFontSize(state.width), Math.round(Math.max(W, H) / 48));
+          [makeTag(m, m, 'ACTUAL', TAG_ACTUAL, fs), makeTag(x2 + m, y2 + m, 'EXPECTED', TAG_EXPECTED, fs)].forEach((label) => {
             label.selectable = label.evented = isInteractive(label);
             c.add(label);
           });
@@ -713,8 +752,8 @@
   // without leaving the tool.
   function isInteractive(o) {
     return state.tool === 'select' ||
-      (state.tool === 'text' && o.type === 'i-text') ||
-      (state.tool === 'comment' && o.type === 'commentBubble');
+      (state.tool === 'text' && (o.type === 'i-text' || o.type === 'tagLabel')) ||
+      (state.tool === 'comment' && (o.type === 'commentBubble' || o.type === 'tagLabel'));
   }
 
   function setTool(tool) {
@@ -784,7 +823,7 @@
     const onColor = isLightColor(color) ? '#1c1c1e' : '#ffffff';
     // A colour label shows a sampled colour, and spotlights have none.
     if (kind === 'redact' || kind === 'color' || kind === 'spotlight') return false;
-    if (o.type === 'commentBubble') {
+    if (o.type === 'commentBubble' || o.type === 'tagLabel') {
       o.set({ backgroundColor: color, fill: onColor });
     } else if (kind === 'step') {
       const [circle, label] = o.getObjects();
@@ -842,6 +881,13 @@
       o.scale(chipFontSize(width) / o.data.size);
       const after = at();
       o.set({ left: o.left + before.x - after.x, top: o.top + before.y - after.y });
+    } else if (o.type === 'tagLabel') {
+      const oldPad = o.padding;
+      o.set('fontSize', Math.round(commentFontSize(width) * 0.9));
+      o.padding = Math.round(o.fontSize * 0.5);
+      // Keep the pill's top-left corner where it was.
+      const d = o.padding - oldPad;
+      o.set({ left: o.left + d * 1.2, top: o.top + d * 0.8 });
     } else if (o.type === 'commentBubble') {
       const oldPad = o.padding;
       o.set('fontSize', commentFontSize(width));
@@ -1121,7 +1167,7 @@
     // history unchanged (snapshot() skips the identical state).
     c.on('text:editing:exited', (e) => {
       const t = e.target;
-      if (!t || t.type !== 'commentBubble' || t.text.trim()) return;
+      if (!t || (t.type !== 'commentBubble' && t.type !== 'tagLabel') || t.text.trim()) return;
       queueMicrotask(() => {
         c.remove(t);
         snapshot();
@@ -1376,6 +1422,18 @@
     // exit), and dismissed if it never gets any.
   }
 
+  // A compare label whose pill's top-left corner sits at (x, y).
+  function makeTag(x, y, text, color, fontSize) {
+    const pad = Math.round(fontSize * 0.5);
+    return new fabric.TagLabel(text, {
+      left: x + pad * 1.2, top: y + pad * 0.8,
+      fontSize, fontWeight: '700', charSpacing: 80,
+      fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      fill: '#ffffff', backgroundColor: color,
+      data: { kind: 'tag' },
+    });
+  }
+
   // A comment bubble whose `tail` corner sits on (x, y).
   function makeComment(x, y, text, tail, fontSize = commentFontSize(state.width)) {
     const pad = Math.round(fontSize * 0.6);
@@ -1554,7 +1612,7 @@
     // The editing-exited handler removes empty comments a tick later; export
     // now, so drop them here or the placeholder bubble would be exported.
     c.getObjects()
-      .filter((o) => o.type === 'commentBubble' && !o.text.trim())
+      .filter((o) => (o.type === 'commentBubble' || o.type === 'tagLabel') && !o.text.trim())
       .forEach((o) => c.remove(o));
     c.requestRenderAll();
     return c.toDataURL({ format: 'png', multiplier });
@@ -1795,7 +1853,7 @@
     const items = [];
     if (target) {
       const objs = target.type === 'activeSelection' ? target.getObjects() : [target];
-      if (objs.length === 1 && (target.type === 'i-text' || target.type === 'commentBubble')) {
+      if (objs.length === 1 && (target.type === 'i-text' || target.type === 'commentBubble' || target.type === 'tagLabel')) {
         items.push({ label: 'Edit text', icon: 'edit', run: () => editText(target) });
       }
       items.push(
