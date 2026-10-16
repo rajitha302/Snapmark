@@ -493,12 +493,73 @@
     return true;
   }
 
+  // Sizes derived from the width setting, shared by creation and resizing.
+  const markerRadius = (width) => 14 + width * 2;
+  const commentFontSize = (width) => Math.round(20 + width * 2.5);
+  const textFontSize = (width) => 16 + width * 3;
+
+  // Picking a size also resizes whatever is selected.
   function setWidth(width) {
     state.width = width;
     state.canvas.freeDrawingBrush.width = width;
     document.querySelectorAll('button.width').forEach((btn) => {
       btn.setAttribute('aria-pressed', parseInt(btn.dataset.width, 10) === width ? 'true' : 'false');
     });
+    const c = state.canvas;
+    const active = c.getActiveObject();
+    if (!active) return;
+    const multi = active.type === 'activeSelection';
+    const targets = multi ? active.getObjects() : [active];
+    // Resize in canvas coordinates, then reselect so the selection box fits.
+    if (multi) c.discardActiveObject();
+    const changed = targets.filter((o) => resize(o, width)).length > 0;
+    if (multi) c.setActiveObject(new fabric.ActiveSelection(targets, { canvas: c }));
+    if (changed) {
+      c.requestRenderAll();
+      snapshot();
+    }
+  }
+
+  function resize(o, width) {
+    const kind = o.data && o.data.kind;
+    if (kind === 'redact') return false;
+    if (o.type === 'commentBubble') {
+      const oldPad = o.padding;
+      o.set('fontSize', commentFontSize(width));
+      o.padding = Math.round(o.fontSize * 0.6);
+      // left/top sit one padding in from the tail; keep the tail on its point.
+      const d = o.padding - oldPad;
+      o.set({ left: o.left + (o.tail[1] === 'l' ? d : -d), top: o.top + (o.tail[0] === 'b' ? -d : d) });
+    } else if (kind === 'step') {
+      // Every part of a marker is proportional to its radius.
+      o.scale(markerRadius(width) / o.getObjects()[0].radius);
+    } else if (o.type === 'i-text') {
+      o.set('fontSize', textFontSize(width));
+    } else if (kind === 'arrow') {
+      setArrowWidth(o, width);
+    } else if (o.stroke) {
+      o.set('strokeWidth', width); // pen, rectangle, ellipse
+    } else {
+      return false; // highlight
+    }
+    o.setCoords();
+    return true;
+  }
+
+  // Arrowheads scale with width, so rebuild the path from its end points
+  // (stored in path space at creation) and shift it so the shaft stays put,
+  // whatever it has been moved, scaled or rotated to since.
+  function setArrowWidth(o, width) {
+    const [x1, y1, x2, y2] = o.data.pts;
+    const startOnCanvas = () => fabric.util.transformPoint(
+      new fabric.Point(x1 - o.pathOffset.x, y1 - o.pathOffset.y), o.calcTransformMatrix()
+    );
+    const before = startOnCanvas();
+    const fresh = new fabric.Path(arrowPath(x1, y1, x2, y2, width, o.data.twoWay));
+    o.set({ path: fresh.path, width: fresh.width, height: fresh.height, strokeWidth: width });
+    o.pathOffset = fresh.pathOffset;
+    const after = startOnCanvas();
+    o.set({ left: o.left + before.x - after.x, top: o.top + before.y - after.y, dirty: true });
   }
 
   function hexToRgba(hex, alpha) {
@@ -601,7 +662,7 @@
         state.isDrawing = false;
         const text = new fabric.IText('Text', {
           left: p.x, top: p.y,
-          fill: state.color, fontSize: 28, fontFamily: 'sans-serif', stroke: null,
+          fill: state.color, fontSize: textFontSize(state.width), fontFamily: 'sans-serif', stroke: null,
           editable: true,
         });
         c.add(text);
@@ -672,10 +733,12 @@
         if (Math.hypot(dx, dy) < 6) {
           c.remove(s); state.currentShape = null; return;
         }
-        const path = new fabric.Path(arrowPath(s.x1, s.y1, s.x2, s.y2, state.width, state.tool === 'arrow2'), {
+        const twoWay = state.tool === 'arrow2';
+        const path = new fabric.Path(arrowPath(s.x1, s.y1, s.x2, s.y2, state.width, twoWay), {
           stroke: state.color, strokeWidth: state.width, fill: null,
           strokeLineCap: 'round', strokeLineJoin: 'round',
           selectable: false, evented: false,
+          data: { kind: 'arrow', twoWay, pts: [s.x1, s.y1, s.x2, s.y2] },
         });
         c.remove(s);
         c.add(path);
@@ -898,7 +961,7 @@
 
   function placeNumberMarker(x, y) {
     const c = state.canvas;
-    const radius = 14 + state.width * 2;
+    const radius = markerRadius(state.width);
     const value = state.numberCounter++;
     const fontSize = Math.round(radius * 1.2);
     const strokeWidth = Math.max(2, Math.round(radius / 6));
@@ -936,7 +999,7 @@
 
   function placeComment(x, y) {
     const c = state.canvas;
-    const fontSize = Math.round(20 + state.width * 2.5);
+    const fontSize = commentFontSize(state.width);
     const pad = Math.round(fontSize * 0.6);
     // Point from the bottom-left like Figma, but flip near the right/top edges
     // so the bubble grows into the image instead of off it.
