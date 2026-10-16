@@ -23,6 +23,7 @@ If there is no image on the clipboard, click the pencil anyway. You can drag an 
 - Move the toolbar to any edge by dragging its grip, and drag tools to reorder them. Snapmark remembers both, even after a restart
 - Resize large screenshots automatically on copy
 - Right-click for a menu: duplicate, bring to front, send to back, delete, undo, copy, and download the full-size PNG
+- A short tour of the editor the first time you open it. Right-click → **Show tips** to see it again
 - Pencil in the status bar lights up when you copy a new image
 
 ## Install

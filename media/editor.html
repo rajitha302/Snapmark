@@ -118,6 +118,15 @@
 
   <div id="context-menu" class="glass" role="menu" aria-label="Actions" tabindex="-1" hidden></div>
   <div id="dock-hint" aria-hidden="true"></div>
+  <div id="tour" class="glass" role="dialog" aria-labelledby="tour-title" aria-describedby="tour-body" hidden>
+    <div class="tour-step" id="tour-step"></div>
+    <div class="tour-title" id="tour-title"></div>
+    <div class="tour-body" id="tour-body"></div>
+    <div class="tour-actions">
+      <button class="action" id="tour-skip" type="button">Skip</button>
+      <button class="action primary" id="tour-next" type="button">Next</button>
+    </div>
+  </div>
   <div id="loupe" aria-hidden="true" hidden><canvas></canvas><div class="loupe-label"></div></div>
   <div id="drop-zones" hidden>
     <div class="drop-zone glass" data-mode="replace">

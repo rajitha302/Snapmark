@@ -601,6 +601,80 @@ button.menu-item[aria-checked="true"]:focus-visible svg { color: #fff; }
 .drop-title { font-size: 15px; font-weight: 600; }
 .drop-sub { font-size: 12px; color: var(--ink-dim); }
 
+/* ---------------------------------------------------------------------------
+   First-run tour
+   ------------------------------------------------------------------------- */
+
+#tour {
+  position: fixed;
+  z-index: 60;
+  width: 264px;
+  padding: 14px 16px 12px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02)),
+    rgba(40, 41, 46, 0.9);
+  animation: tour-in 0.18s ease-out;
+}
+#tour[hidden] { display: none; }
+@keyframes tour-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+/* Arrow: a rotated square on the edge facing the target. */
+#tour::before {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: rgb(52, 53, 58);
+  border: 1px solid var(--glass-edge);
+  transform: rotate(45deg);
+}
+#tour[data-side="right"]::before { left: -7px; top: calc(var(--arrow-y) - 6px); border-top: 0; border-right: 0; }
+#tour[data-side="left"]::before { right: -7px; top: calc(var(--arrow-y) - 6px); border-bottom: 0; border-left: 0; }
+#tour[data-side="below"]::before { top: -7px; left: calc(var(--arrow-x) - 6px); border-bottom: 0; border-right: 0; }
+#tour[data-side="above"]::before { bottom: -7px; left: calc(var(--arrow-x) - 6px); border-top: 0; border-left: 0; }
+#tour[data-side="center"]::before { display: none; }
+.tour-step {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-dim);
+  margin-bottom: 4px;
+}
+.tour-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.tour-body {
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(245, 245, 247, 0.85);
+}
+.tour-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 12px;
+}
+#tour button.action {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 15px;
+  font-size: 13px;
+}
+#tour button[hidden] { display: none; }
+#tour-skip { color: var(--ink-dim); }
+/* What the current tip points at. */
+.tour-target {
+  outline: 2px solid rgba(10, 132, 255, 0.9);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 7px rgba(10, 132, 255, 0.18), 0 0 28px rgba(10, 132, 255, 0.35);
+}
+#btn-done.tour-target { box-shadow: 0 0 0 7px rgba(10, 132, 255, 0.18), 0 6px 22px var(--blue-glow); }
+
 /* Narrow panels: tighter buttons so the tools fit on one row, and no
    dividers, which would dangle at the end of a wrapped row. */
 @media (max-width: 520px) {
@@ -615,7 +689,7 @@ button.menu-item[aria-checked="true"]:focus-visible svg { color: #fff; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #context-menu { animation: none; }
+  #context-menu, #tour { animation: none; }
   #dock-hint { transition: none; }
   .drop-zone { transition: none; }
   .drop-zone.over { transform: none; }

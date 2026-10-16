@@ -24,6 +24,7 @@
     zoom: 1,
     dock: 'left',
     pxScale: 1, // screenshot pixels per CSS pixel, for Measure labels
+    tourSeen: true, // until the extension says otherwise
     sampler: null, // { bg, canvas, ctx } holding the background's pixels
   };
 
@@ -265,11 +266,16 @@
         if (typeof msg.maxDimension === 'number') state.maxDimension = msg.maxDimension;
         if (Array.isArray(msg.toolsOrder)) applyToolOrder(msg.toolsOrder);
         if (typeof msg.toolsDock === 'string') setDock(msg.toolsDock);
+        if (typeof msg.tourSeen === 'boolean') {
+          state.tourSeen = msg.tourSeen;
+          maybeStartTour();
+        }
       }
     });
 
     attachDropAndPaste();
     attachContextMenu();
+    attachTour();
 
     window.addEventListener('resize', () => {
       layoutChrome();
@@ -286,6 +292,7 @@
     document.getElementById('tools').removeAttribute('style'); // drop drag position
     layoutChrome();
     if (state.imgW) applyFitScale();
+    positionTour();
   }
 
   // The bars float over the stage, so pad the scroll area and the empty state
@@ -509,6 +516,7 @@
       state.numberCounter = 1;
       updateHistoryButtons();
       document.body.classList.add('loaded');
+      maybeStartTour();
       document.body.classList.remove('empty');
     });
   }
@@ -1705,6 +1713,7 @@
     fit: svg('<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>'),
     clear: svg('<path d="m7 21-4-4L14 6l4 4L7 21Z"/><path d="M11 21h10"/>'),
     replace: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>'),
+    tips: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><path d="M12 17h.01"/>'),
     compare: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>'),
   };
 
@@ -1796,6 +1805,7 @@
     if (!target && c.getObjects().some((o) => !o.excludeFromExport)) {
       items.push('sep', { label: 'Clear annotations', icon: 'clear', danger: true, run: clearAll });
     }
+    if (!target) items.push('sep', { label: 'Show tips', icon: 'tips', run: startTour });
     return items;
   }
 
@@ -1951,6 +1961,127 @@
     window.addEventListener('blur', closeMenu);
     window.addEventListener('resize', closeMenu);
     wrap.addEventListener('scroll', closeMenu);
+  }
+
+  // ---------------------------------------------------------------------------
+  // First-run tour: a few tips pointing at the toolbar, the style bar, the
+  // canvas and Copy. Shown once per install (the extension keeps
+  // snapmark.tourSeen in globalState), and again from "Show tips" in the
+  // right-click menu. It doesn't block the editor.
+  // ---------------------------------------------------------------------------
+
+  const TOUR_STEPS = [
+    {
+      target: () => document.getElementById('tools'),
+      side: () => ({ left: 'right', right: 'left', top: 'below', bottom: 'above' }[state.dock]),
+      title: 'Pick a tool',
+      body: () => 'A small corner mark means more tools are inside: hover over it to see them. Drag ⠿ to move the toolbar, or drag a tool to reorder it.',
+    },
+    {
+      target: () => document.getElementById('stylebar'),
+      side: () => 'above',
+      title: 'Color and size',
+      body: () => 'They apply to what you draw next. With something selected, they change it instead.',
+    },
+    {
+      target: () => state.canvas.upperCanvasEl,
+      side: () => 'center',
+      title: 'Right-click for more',
+      body: () => 'Duplicate, delete, download the PNG and more. Zoom with ' + keyHint('⌘', 'Ctrl') + ' + scroll.',
+    },
+    {
+      target: () => document.getElementById('btn-done'),
+      side: () => 'below',
+      title: 'Copy, then paste',
+      body: () => 'Copy (' + keyHint('⌘⏎', 'Ctrl+Enter') + ') puts the annotated image on your clipboard. Paste it into any AI chat.',
+    },
+  ];
+
+  const tour = { step: -1, timer: 0 };
+
+  function maybeStartTour() {
+    if (state.tourSeen || !state.imgW || tour.step >= 0) return;
+    state.tourSeen = true;
+    vscode.postMessage({ type: 'tourSeen' });
+    clearTimeout(tour.timer);
+    tour.timer = setTimeout(startTour, 500); // let the image settle in first
+  }
+
+  function startTour() {
+    closeMenu();
+    showTourStep(0);
+  }
+
+  function endTour() {
+    clearTimeout(tour.timer);
+    tour.step = -1;
+    document.getElementById('tour').hidden = true;
+    document.querySelectorAll('.tour-target').forEach((el) => el.classList.remove('tour-target'));
+  }
+
+  function showTourStep(i) {
+    if (i >= TOUR_STEPS.length) { endTour(); return; }
+    tour.step = i;
+    const s = TOUR_STEPS[i];
+    document.querySelectorAll('.tour-target').forEach((el) => el.classList.remove('tour-target'));
+    const target = s.target();
+    if (s.side() !== 'center') target.classList.add('tour-target');
+    document.getElementById('tour-step').textContent = (i + 1) + ' of ' + TOUR_STEPS.length;
+    document.getElementById('tour-title').textContent = s.title;
+    document.getElementById('tour-body').textContent = s.body();
+    const last = i === TOUR_STEPS.length - 1;
+    document.getElementById('tour-next').textContent = last ? 'Got it' : 'Next';
+    document.getElementById('tour-skip').hidden = last;
+    const pop = document.getElementById('tour');
+    pop.hidden = false;
+    positionTour();
+    document.getElementById('tour-next').focus({ preventScroll: true });
+  }
+
+  // Beside the target on the given side, with the arrow pointing at the
+  // target's centre; 'center' sits over the middle of the visible canvas.
+  function positionTour() {
+    if (tour.step < 0) return;
+    const s = TOUR_STEPS[tour.step];
+    const pop = document.getElementById('tour');
+    const side = s.side();
+    let r = s.target().getBoundingClientRect();
+    if (side === 'center') {
+      const w = document.getElementById('canvas-wrap').getBoundingClientRect();
+      r = {
+        left: Math.max(r.left, w.left), right: Math.min(r.right, w.right),
+        top: Math.max(r.top, w.top), bottom: Math.min(r.bottom, w.bottom),
+      };
+    }
+    const pw = pop.offsetWidth, ph = pop.offsetHeight, gap = 14;
+    const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+    let x, y;
+    if (side === 'right') { x = r.right + gap; y = cy - ph / 2; }
+    else if (side === 'left') { x = r.left - gap - pw; y = cy - ph / 2; }
+    else if (side === 'below') { x = cx - pw / 2; y = r.bottom + gap; }
+    else if (side === 'above') { x = cx - pw / 2; y = r.top - gap - ph; }
+    else { x = cx - pw / 2; y = cy - ph / 2; }
+    x = Math.max(8, Math.min(x, window.innerWidth - pw - 8));
+    y = Math.max(8, Math.min(y, window.innerHeight - ph - 8));
+    pop.dataset.side = side;
+    pop.style.left = x + 'px';
+    pop.style.top = y + 'px';
+    // Keep the arrow on the target even when the bubble was clamped.
+    pop.style.setProperty('--arrow-x', Math.max(18, Math.min(pw - 18, cx - x)) + 'px');
+    pop.style.setProperty('--arrow-y', Math.max(18, Math.min(ph - 18, cy - y)) + 'px');
+  }
+
+  function attachTour() {
+    document.getElementById('tour-next').addEventListener('click', () => showTourStep(tour.step + 1));
+    document.getElementById('tour-skip').addEventListener('click', endTour);
+    // Capture phase, so Escape ends the tour instead of closing the editor.
+    document.addEventListener('keydown', (e) => {
+      if (tour.step < 0 || e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      endTour();
+    }, true);
+    window.addEventListener('resize', positionTour);
   }
 
   if (document.readyState === 'loading') {

@@ -601,12 +601,15 @@ async function annotateCommand(context) {
           .get('maxDimension', 1920);
         const toolsDock = context.globalState.get('snapmark.toolsDock', 'left');
         const toolsOrder = context.globalState.get('snapmark.toolsOrder', null);
-        panel.webview.postMessage({ type: 'config', maxDimension, toolsDock, toolsOrder });
+        const tourSeen = context.globalState.get('snapmark.tourSeen', false);
+        panel.webview.postMessage({ type: 'config', maxDimension, toolsDock, toolsOrder, tourSeen });
         panel.webview.postMessage({ type: 'loadImage', dataUrl });
       } else if (msg.type === 'toolsDock') {
         if (['left', 'right', 'top', 'bottom'].includes(msg.dock)) {
           context.globalState.update('snapmark.toolsDock', msg.dock);
         }
+      } else if (msg.type === 'tourSeen') {
+        context.globalState.update('snapmark.tourSeen', true);
       } else if (msg.type === 'toolsOrder') {
         if (Array.isArray(msg.order) && msg.order.length <= 50 && msg.order.every((t) => typeof t === 'string')) {
           context.globalState.update('snapmark.toolsOrder', msg.order);

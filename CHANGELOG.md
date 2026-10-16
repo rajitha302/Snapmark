@@ -29,6 +29,7 @@
 - New Spotlight (`S`): drag over the part that matters and everything else is dimmed. Annotations stay bright, and several spotlights can overlap.
 - Compare two images: Upload → Compare with another image (or drop a second image onto the "Compare" target) places it beside the current one, labelled "Actual" and "Expected", for "make it look like this" requests. Upload → Replace image works as before.
 - To keep the toolbar compact, related tools share a slot: arrow and two-way arrow, rectangle and ellipse, highlight and spotlight. The slot shows the last tool used; hover over it to see the others (or click it again, or right-click it). Shortcuts still select each tool directly.
+- First-run tips: the first time you open the editor, four short tips point at the toolbar, the style bar, the right-click menu and Copy. Skip them at any point (or press Esc); right-click → Show tips brings them back.
 - Fixed an error logged when VS Code shut the extension down.
 
 ## 1.0.0 — 2026-04-18
