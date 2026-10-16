@@ -2120,7 +2120,7 @@
     dog: {
       fur: '#c99460', hi: '#e6bb8a', shade: '#9c6a3a', dark: '#6f4424', far: '#a06c3c',
       light: '#f6eacf', lightShade: '#dcc6a0', nose: '#24170d', ear: '#6f4424', eye: '#24170d',
-      collar: '#d9433f', tag: '#f2cf73', line: '#3e2614',
+      mouth: '#5a3a26', tongueLine: '#c95a6a', collar: '#d9433f', tag: '#f2cf73', line: '#3e2614',
     },
   };
   const HOME_COLORS = {
@@ -2288,6 +2288,38 @@
         hline(X + 8, Y + 2, X + 13, Y + 1, C.whisker); hline(X + 8, Y + 4, X + 13, Y + 5, C.whisker);
       });
     };
+    // The dog looks at you too: a round head centred on design (cx, cy) with
+    // floppy ears, a cream blaze and muzzle, big eyes, a shiny black nose and
+    // a tongue when it pants. Details are mirrored about the centre.
+    const dogFace = (cx, cy) => {
+      ell(cx, cy, 4.2, 3.9, C.fur);
+      ell(cx, cy - 1.6, 0.9, 2.3, C.light); // blaze
+      ell(cx, cy + 2, 2.7, 1.9, C.light); // muzzle
+      ell(cx - 4, cy + 0.9, 1.5, 3.1, C.ear);
+      ell(cx + 4, cy + 0.9, 1.5, 3.1, C.ear);
+      const X = Math.round(cx * F), Y = Math.round(cy * F);
+      const both = (x, y, c) => { dot(x, y, c); dot(2 * X - 1 - x, y, c); };
+      if (p.eyes === 'shut') {
+        [[X - 6, Y - 1], [X - 5, Y], [X - 4, Y], [X - 3, Y - 1]].forEach(([x, y]) => both(x, y, C.eye));
+      } else {
+        [[X - 5, Y - 3], [X - 4, Y - 3], [X - 6, Y - 2], [X - 5, Y - 2], [X - 4, Y - 2], [X - 3, Y - 2],
+          [X - 6, Y - 1], [X - 5, Y - 1], [X - 4, Y - 1], [X - 3, Y - 1], [X - 5, Y], [X - 4, Y]].forEach(([x, y]) => both(x, y, C.eye));
+        both(X - 4, Y - 2, '#ffffff');
+      }
+      [[X - 2, Y + 1], [X - 1, Y + 1], [X - 3, Y + 2], [X - 2, Y + 2], [X - 1, Y + 2], [X - 2, Y + 3], [X - 1, Y + 3]]
+        .forEach(([x, y]) => both(x, y, C.nose));
+      dot(X - 2, Y + 1, '#8a7a72'); // shine
+      if (p.mouth === 'open') {
+        for (let y = Y + 4; y <= Y + 6; y++) { both(X - 2, y, C.eye); both(X - 1, y, C.eye); }
+        both(X - 1, Y + 6, PET_TONGUE);
+      } else {
+        [[X - 1, Y + 4], [X - 2, Y + 5], [X - 3, Y + 5]].forEach(([x, y]) => both(x, y, C.mouth));
+        if (p.mouth === 'tongue') {
+          for (let y = Y + 5; y <= Y + 8; y++) { both(X - 2, y, PET_TONGUE); both(X - 1, y, PET_TONGUE); }
+          both(X - 1, Y + 6, C.tongueLine); both(X - 1, Y + 7, C.tongueLine);
+        }
+      }
+    };
     let heartAt = [9, 0];
 
     if (p.pose === 'lie') {
@@ -2300,11 +2332,7 @@
       if (cat) {
         catFace(18.5, 17.2);
       } else {
-        ell(18.5, 17.5, 3.8, 3.3, C.fur);
-        ell(22, 18.6, 2, 1.5, C.light);
-        set(23, 18, C.nose);
-        ell(16, 18, 1.4, 2.6, C.ear);
-        eyes(20, 17);
+        dogFace(18.5, 17.2);
       }
       heartAt = [12, 8];
     } else if (p.pose === 'stand') {
@@ -2355,20 +2383,13 @@
       if (!p.paw) rect(13, 18, 15, 22, C.light);
       else if (!cat) line([[14, 19], [16, 15], [18.5, 13]], 1.2, C.light);
       const hy = 9.5 + (p.headDown ? 1 : 0);
-      const r = Math.round(hy);
       if (cat) {
         [[7, 17], [8, 15], [10, 12]].forEach(([x, y]) => stripe(x, y));
         catFace(15.5, hy);
       } else {
         ell(9, 17, 1.8, 1.5, C.dark);
-        ell(15.5, hy - 0.5, 4, 3.9, C.fur);
-        ell(19.4, hy + 1.6, 2, 1.5, C.light);
-        set(20, r, C.nose); set(21, r, C.nose);
-        ell(12.8, hy + 0.5, 1.5, 3, C.ear);
-        eyes(17, r - 1);
-        collar([[13.2, hy + 3.2], [16.4, hy + 3.9]], 15.6, hy + 4.3);
-        if (p.mouth === 'tongue') { set(19, r + 2, C.eye); rect(19, r + 3, 20, r + 4, PET_TONGUE); }
-        if (p.mouth === 'open') rect(18, r + 2, 20, r + 2, C.eye);
+        collar([[12.6, hy + 3.4], [18.2, hy + 3.6]], 15.2, hy + 4.1);
+        dogFace(15.5, hy - 0.4);
       }
     }
 
