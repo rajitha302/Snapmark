@@ -175,6 +175,11 @@
     type: 'measure',
     objectCaching: false, // the label is drawn outside the line's bounds
     hasControls: false,
+    labelText: null, // text typed over the label; null shows the length
+
+    toObject: function (props) {
+      return this.callSuper('toObject', ['labelText'].concat(props || []));
+    },
 
     initialize: function (points, options) {
       this.callSuper('initialize', points, options);
@@ -203,11 +208,13 @@
       });
       ctx.stroke();
 
-      const text = measureLabel(len);
+      const text = this.labelText || measureLabel(len);
       const fs = 12 + w * 2;
       ctx.font = '600 ' + fs + 'px "Helvetica Neue", Helvetica, Arial, sans-serif';
-      const lw = ctx.measureText(text).width + fs;
-      const lh = fs * 1.5;
+      const lines = wrapLabel(ctx, text, fs * MEASURE_WRAP);
+      const lineH = fs * 1.2;
+      const lw = Math.max(...lines.map((t) => ctx.measureText(t).width)) + fs;
+      const lh = lines.length * lineH + fs * 0.3;
       let cx = (p.x1 + p.x2) / 2, cy = (p.y1 + p.y2) / 2;
       // Too short to hold the label: put it beside the line instead.
       if (len < Math.abs(ux) * lw + Math.abs(uy) * lh + tick * 2) {
@@ -216,7 +223,7 @@
         cy += ny * off;
       }
       ctx.beginPath();
-      ctx.roundRect(cx - lw / 2, cy - lh / 2, lw, lh, lh / 2);
+      ctx.roundRect(cx - lw / 2, cy - lh / 2, lw, lh, Math.min(lh / 2, fs * 0.75)); // a pill, or a rounded box when wrapped
       ctx.fillStyle = this.stroke;
       ctx.fill();
       ctx.lineWidth = Math.max(1.5, fs * 0.08);
@@ -225,8 +232,9 @@
       ctx.fillStyle = isLightColor(this.stroke) ? '#1c1c1e' : '#ffffff';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(text, cx, cy + fs * 0.04);
+      lines.forEach((t, i) => ctx.fillText(t, cx, cy + (i - (lines.length - 1) / 2) * lineH + fs * 0.04));
       ctx.restore();
+      this._label = { cx, cy, w: lw, h: lh, fs, text }; // for editing it in place
     },
   });
 
@@ -237,6 +245,28 @@
       if (callback) callback(m);
     }, 'points');
   };
+
+  // Labels wider than this many font-sizes (~20 characters) wrap.
+  const MEASURE_WRAP = 11;
+
+  // Greedy word wrap to maxW, breaking a single over-long word by characters.
+  function wrapLabel(ctx, text, maxW) {
+    const fits = (t) => ctx.measureText(t).width <= maxW;
+    const lines = [];
+    let line = '';
+    text.split(/\s+/).filter(Boolean).forEach((word) => {
+      const next = line ? line + ' ' + word : word;
+      if (fits(next)) { line = next; return; }
+      if (line) lines.push(line);
+      line = '';
+      for (const ch of word) {
+        if (line && !fits(line + ch)) { lines.push(line); line = ''; }
+        line += ch;
+      }
+    });
+    lines.push(line);
+    return lines;
+  }
 
   function measureLabel(len) {
     const v = len / state.pxScale;
@@ -1234,6 +1264,10 @@
     });
 
     c.on('object:modified', () => snapshot());
+    c.upperCanvasEl.addEventListener('dblclick', (e) => {
+      const m = measureAt(e);
+      if (m) editMeasureLabel(m);
+    });
     c.on('object:added', syncScaleButton);
     c.on('object:removed', syncScaleButton);
 
@@ -1804,10 +1838,81 @@
     }, { passive: false });
   }
 
+  // Double-click a measurement (its label or line, in any tool) to type over
+  // the label. Clearing it, or typing the length back, returns to the
+  // automatic length.
+  function measureAt(e) {
+    const c = state.canvas;
+    const p = c.getPointer(e);
+    const objs = c.getObjects();
+    for (let i = objs.length - 1; i >= 0; i--) {
+      const o = objs[i];
+      if (o.type !== 'measure') continue;
+      const l = o._label;
+      const q = fabric.util.transformPoint(p, fabric.util.invertTransform(o.calcTransformMatrix()));
+      if ((l && Math.abs(q.x - l.cx) <= l.w / 2 && Math.abs(q.y - l.cy) <= l.h / 2) || o.containsPoint(p)) return o;
+    }
+    return null;
+  }
+
+  function editMeasureLabel(o) {
+    const l = o._label;
+    if (!l) return;
+    const c = state.canvas;
+    const s = state.scale * state.zoom;
+    const r = c.upperCanvasEl.getBoundingClientRect();
+    const at = fabric.util.transformPoint(new fabric.Point(l.cx, l.cy), o.calcTransformMatrix());
+    const input = document.createElement('textarea');
+    input.id = 'measure-edit';
+    input.rows = 1;
+    input.value = l.text;
+    input.setAttribute('aria-label', 'Measurement label');
+    const fontPx = Math.max(12, l.fs * s);
+    const light = isLightColor(o.stroke);
+    Object.assign(input.style, {
+      left: r.left + at.x * s + 'px', top: r.top + at.y * s + 'px',
+      fontSize: fontPx + 'px',
+      background: o.stroke, color: light ? '#1c1c1e' : '#ffffff',
+      borderColor: light ? 'rgba(0, 0, 0, 0.18)' : '#ffffff',
+    });
+    // As wide as the text (up to the wrap width), as tall as its lines.
+    const fit = () => {
+      measureCtx.font = '600 ' + fontPx + 'px "Helvetica Neue", Helvetica, Arial, sans-serif';
+      const textW = Math.min(measureCtx.measureText(input.value || ' ').width, fontPx * MEASURE_WRAP);
+      input.style.width = textW + fontPx * 1.6 + 'px';
+      input.style.height = 'auto';
+      input.style.height = input.scrollHeight + 4 + 'px';
+      input.style.borderRadius = input.scrollHeight > fontPx * 1.9 ? fontPx * 0.75 + 'px' : '999px';
+    };
+    let done = false;
+    const finish = (commit) => {
+      if (done) return;
+      done = true;
+      const v = input.value.trim();
+      input.remove();
+      if (!commit) return;
+      const auto = measureLabel(Math.hypot(o.x2 - o.x1, o.y2 - o.y1));
+      o.labelText = v && v !== auto ? v : null;
+      c.requestRenderAll();
+      snapshot();
+    };
+    input.addEventListener('input', fit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+    document.body.appendChild(input);
+    fit(); // needs to be in the page to measure its height
+    input.focus();
+    input.select();
+  }
+
   function attachKeyboardHandlers() {
     document.addEventListener('keydown', (e) => {
       const active = state.canvas.getActiveObject();
       if (active && active.isEditing) return;
+      if (e.target.closest && e.target.closest('#measure-edit')) return; // typing a label
 
       const cmd = e.metaKey || e.ctrlKey;
       const k = e.key;
@@ -1941,6 +2046,9 @@
     const items = [];
     if (target) {
       const objs = target.type === 'activeSelection' ? target.getObjects() : [target];
+      if (objs.length === 1 && target.type === 'measure') {
+        items.push({ label: 'Edit label', icon: 'edit', run: () => editMeasureLabel(target) });
+      }
       if (objs.length === 1 && (target.type === 'i-text' || target.type === 'commentBubble' || target.type === 'tagLabel')) {
         items.push({ label: 'Edit text', icon: 'edit', run: () => editText(target) });
       }

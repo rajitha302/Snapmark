@@ -24,7 +24,7 @@
 - New Upload button next to Copy for opening a different image partway through. It replaces the current image and its annotations.
 - New two-way arrow tool (`D`), for showing a relationship or a measurement between two points.
 - New shortcuts: `E` for ellipse, `H` for highlight.
-- New Measure tool (`U`) for UI work: drag between two points to label the distance in pixels. Lines snap to horizontal or vertical (hold Shift to force it), and a magnifier shows the exact pixels under the pointer. On Retina screenshots the label shows CSS pixels: Snapmark reads the density saved in the PNG, and the `2×` button in the bottom bar corrects it when the guess is wrong.
+- New Measure tool (`U`) for UI work: drag between two points to label the distance in pixels. Lines snap to horizontal or vertical (hold Shift to force it), and a magnifier shows the exact pixels under the pointer. On Retina screenshots the label shows CSS pixels: Snapmark reads the density saved in the PNG, and the `2×` button in the bottom bar corrects it when the guess is wrong. Double-click a label to type your own text instead (long text wraps); clear it to get the length back.
 - New Color picker (`I`): click any pixel to label its hex value (e.g. `#1F6FEB`), with the same magnifier while you aim.
 - New Spotlight (`S`): drag over the part that matters and everything else is dimmed. Annotations stay bright, and several spotlights can overlap.
 - Paste an image (`Cmd/Ctrl+V`) while one is open to add it onto the canvas as its own object, ready to move, resize, annotate over, duplicate or delete. Also in the Upload menu (Add image to canvas…) and as a drop target. Replacing the image is still in the Upload menu.
