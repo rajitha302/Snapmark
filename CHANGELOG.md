@@ -12,6 +12,7 @@
 - Windows: clipboard detection uses one background PowerShell process instead of starting a new one every 2.5 seconds.
 - Linux: clipboard tool detection no longer runs on every poll.
 - New comment tool (`M`): click a spot to drop a Figma-style speech bubble that points at it, then type. It uses the current colour, the width setting controls the text size, you can double-click to edit it again, and it flips direction near the right and top edges.
+- The toolbar can be moved: drag its grip (or focus it and use the arrow keys) to dock it on the left, right, top or bottom edge. The position is remembered.
 - New upload button next to Copy for opening a different image partway through. It replaces the current image and its annotations.
 - New two-way arrow tool (`D`), for showing a relationship or a measurement between two points.
 - New shortcuts: `E` for ellipse, `H` for highlight.

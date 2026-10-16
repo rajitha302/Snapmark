@@ -22,6 +22,7 @@
     numberCounter: 1,
     maxDimension: 1920,
     zoom: 1,
+    dock: 'left',
   };
 
   const MIN_ZOOM = 0.2;
@@ -83,6 +84,8 @@
     attachToolbarHandlers();
     attachKeyboardHandlers();
     attachWheelZoom();
+    attachToolsDrag();
+    layoutChrome();
 
     vscode.postMessage({ type: 'ready' });
 
@@ -94,13 +97,95 @@
         else showEmptyState();
       } else if (msg.type === 'config') {
         if (typeof msg.maxDimension === 'number') state.maxDimension = msg.maxDimension;
+        if (typeof msg.toolsDock === 'string') setDock(msg.toolsDock);
       }
     });
 
     attachDropAndPaste();
 
     window.addEventListener('resize', () => {
+      layoutChrome();
       if (state.imgW) applyFitScale();
+    });
+  }
+
+  const DOCKS = ['left', 'right', 'top', 'bottom'];
+
+  function setDock(dock) {
+    if (!DOCKS.includes(dock)) return;
+    state.dock = dock;
+    document.body.dataset.dock = dock;
+    document.getElementById('tools').removeAttribute('style'); // drop drag position
+    layoutChrome();
+    if (state.imgW) applyFitScale();
+  }
+
+  // The bars float over the stage, so pad the scroll area and the empty state
+  // to the space they leave. The tool pill can sit on any edge.
+  function layoutChrome() {
+    const tools = document.getElementById('tools');
+    const stylebarTop = document.getElementById('stylebar').getBoundingClientRect().top;
+    // Docked at the bottom, the pill sits just above the style bar, whose
+    // height changes when it wraps.
+    tools.style.bottom = state.dock === 'bottom' ? (window.innerHeight - stylebarTop + 10) + 'px' : '';
+    const t = tools.getBoundingClientRect();
+    const topbarBottom = document.getElementById('topbar').getBoundingClientRect().bottom;
+    const pad = {
+      top: Math.max(topbarBottom, state.dock === 'top' ? t.bottom : 0) + 16,
+      right: state.dock === 'right' ? window.innerWidth - t.left + 16 : 24,
+      bottom: window.innerHeight - (state.dock === 'bottom' ? t.top : stylebarTop) + 16,
+      left: state.dock === 'left' ? t.right + 16 : 24,
+    };
+    const css = pad.top + 'px ' + pad.right + 'px ' + pad.bottom + 'px ' + pad.left + 'px';
+    document.getElementById('canvas-wrap').style.padding = css;
+    document.getElementById('empty-state').style.inset = css;
+    return pad;
+  }
+
+  // Drag the grip to move the tool pill; it snaps to the nearest edge on
+  // release. Arrow keys on the focused grip do the same without a mouse.
+  function attachToolsDrag() {
+    const tools = document.getElementById('tools');
+    const grip = document.getElementById('tools-grip');
+    const commit = (dock) => {
+      setDock(dock);
+      vscode.postMessage({ type: 'toolsDock', dock });
+    };
+    let drag = null;
+    grip.addEventListener('pointerdown', (e) => {
+      const r = tools.getBoundingClientRect();
+      drag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top, x0: e.clientX, y0: e.clientY, moved: false };
+      grip.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    grip.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 4) return;
+      drag.moved = true;
+      tools.classList.add('dragging');
+      Object.assign(tools.style, {
+        left: e.clientX - drag.dx + 'px', top: e.clientY - drag.dy + 'px',
+        right: 'auto', bottom: 'auto', transform: 'none',
+      });
+    });
+    const end = (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const moved = drag.moved;
+      drag = null;
+      tools.classList.remove('dragging');
+      if (!moved) return;
+      if (e.type === 'pointercancel') { setDock(state.dock); return; }
+      const dist = { left: e.clientX, right: window.innerWidth - e.clientX, top: e.clientY, bottom: window.innerHeight - e.clientY };
+      commit(DOCKS.reduce((a, b) => (dist[b] < dist[a] ? b : a)));
+    };
+    grip.addEventListener('pointerup', end);
+    grip.addEventListener('pointercancel', end);
+    grip.addEventListener('keydown', (e) => {
+      const dock = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'top', ArrowDown: 'bottom' }[e.key];
+      if (!dock) return;
+      e.preventDefault();
+      e.stopPropagation();
+      commit(dock);
     });
   }
 
@@ -193,17 +278,9 @@
 
   function applyFitScale() {
     const wrap = document.getElementById('canvas-wrap');
-    // The bars float over the stage and wrap at narrow/short sizes, so fit
-    // the image into the space they leave: right of the tools, below the top
-    // buttons, above the style bar.
-    const top = document.getElementById('topbar').getBoundingClientRect().bottom + 16;
-    const bottom = window.innerHeight - document.getElementById('stylebar').getBoundingClientRect().top + 16;
-    const left = document.getElementById('tools').getBoundingClientRect().right + 16;
-    wrap.style.paddingTop = top + 'px';
-    wrap.style.paddingBottom = bottom + 'px';
-    wrap.style.paddingLeft = left + 'px';
-    const maxW = wrap.clientWidth - left - 24;
-    const maxH = wrap.clientHeight - top - bottom;
+    const pad = layoutChrome();
+    const maxW = wrap.clientWidth - pad.left - pad.right;
+    const maxH = wrap.clientHeight - pad.top - pad.bottom;
     const fit = Math.min(1, maxW / state.imgW, maxH / state.imgH);
     state.scale = fit;
     const effective = fit * state.zoom;
