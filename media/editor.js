@@ -1348,8 +1348,10 @@
       const r = menu.getBoundingClientRect();
       menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + 'px';
       menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + 'px';
-      const first = enabledItems()[0];
-      if (first) first.focus({ preventScroll: true });
+      // Focus the menu, not its first item: a focused item draws as
+      // highlighted, which looks like a hover on a mouse-opened menu. Arrow
+      // keys move onto the items from here.
+      menu.focus({ preventScroll: true });
     };
 
     document.addEventListener('contextmenu', (e) => {
@@ -1376,7 +1378,7 @@
       const i = list.indexOf(document.activeElement);
       if (e.key === 'Escape') close();
       else if (e.key === 'ArrowDown') list[(i + 1) % list.length].focus();
-      else if (e.key === 'ArrowUp') list[(i - 1 + list.length) % list.length].focus();
+      else if (e.key === 'ArrowUp') list[i < 0 ? list.length - 1 : (i - 1 + list.length) % list.length].focus();
       else if (e.key === 'Enter' || e.key === ' ') { if (i >= 0) list[i].click(); }
       else return;
       e.preventDefault();
