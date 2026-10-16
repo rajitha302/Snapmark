@@ -5,7 +5,7 @@
 
   const state = {
     tool: 'pen',
-    color: '#ff3b30',
+    color: '#007aff',
     width: 4,
     canvas: null,
     imgW: 0,
@@ -322,6 +322,15 @@
     applyFitScale();
   }
 
+  // Which objects respond to the pointer: everything in Select, and the
+  // tool's own objects in Text/Comment so you can re-edit or drag them
+  // without leaving the tool.
+  function isInteractive(o) {
+    return state.tool === 'select' ||
+      (state.tool === 'text' && o.type === 'i-text') ||
+      (state.tool === 'comment' && o.type === 'commentBubble');
+  }
+
   function setTool(tool) {
     if (state.pendingCrop && tool !== 'crop') cancelCrop();
     state.tool = tool;
@@ -330,8 +339,7 @@
     c.selection = tool === 'select';
     c.discardActiveObject();
     c.forEachObject((o) => {
-      o.selectable = tool === 'select';
-      o.evented = tool === 'select';
+      o.selectable = o.evented = isInteractive(o);
     });
     c.defaultCursor = tool === 'select' ? 'default' : 'crosshair';
     c.requestRenderAll();
@@ -373,8 +381,18 @@
       snapshot();
     });
 
+    // Fabric ends text editing before 'mouse:down' fires, so note it here.
+    c.on('mouse:down:before', () => {
+      const active = c.getActiveObject();
+      state.wasEditing = !!(active && active.isEditing);
+    });
+
     c.on('mouse:down', (opt) => {
       if (c.isDrawingMode || state.tool === 'select') return;
+      // The tool stays selected, so a click on an existing text/comment edits
+      // or drags it, and a click away from one being typed in just finishes it.
+      if (opt.target && isInteractive(opt.target)) return;
+      if (state.wasEditing) return;
       const p = c.getPointer(opt.e);
       state.isDrawing = true;
       state.startPoint = p;
@@ -450,7 +468,6 @@
           editable: true,
         });
         c.add(text);
-        setTool('select');
         c.setActiveObject(text);
         text.enterEditing();
         text.selectAll();
@@ -611,8 +628,7 @@
     state.canvas.loadFromJSON(json, () => {
       state.canvas.backgroundImage = bg;
       state.canvas.forEachObject((o) => {
-        o.selectable = state.tool === 'select';
-        o.evented = state.tool === 'select';
+        o.selectable = o.evented = isInteractive(o);
       });
       reseedNumberCounter();
       state.canvas.requestRenderAll();
@@ -801,7 +817,6 @@
       data: { kind: 'comment' },
     });
     c.add(bubble);
-    setTool('select');
     c.setActiveObject(bubble);
     bubble.enterEditing();
     bubble.selectAll();
@@ -905,7 +920,7 @@
       else if (k === 'b' || k === 'B') setTool('redact');
       else if (k === 'n' || k === 'N') setTool('number');
       else if (k === 'm' || k === 'M') setTool('comment');
-      else if ((k === 'Delete' || k === 'Backspace') && state.tool === 'select') {
+      else if (k === 'Delete' || k === 'Backspace') {
         const obj = state.canvas.getActiveObject();
         if (!obj) return;
         if (obj.type === 'activeSelection') {
